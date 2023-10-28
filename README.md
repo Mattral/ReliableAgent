@@ -45,5 +45,5 @@ Here's a quick overview of what you'll find in our documentation:
    - Discover the world of deep learning and key neural network architectures like CNNs, RNNs, and Transformers.
 
 8. **Readme.md**
-   
+   - The one you are reading here.   
 
