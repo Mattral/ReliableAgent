@@ -5,7 +5,7 @@ Loss functions, also known as cost or objective functions, play a pivotal role i
 
 ## Classification Loss Functions
 
-1. **Binary Cross-Entropy Loss**
+1. **Binary Cross-Entropy Loss** 
    - *Use Case*: Binary classification problems where the target variable assumes one of two classes (0 or 1).
    - *Description*: Binary cross-entropy loss quantifies the dissimilarity between the predicted class probabilities and true binary labels (0 or 1). It is instrumental in training models to make decisions in binary scenarios.
    - *Mathematical Representation*:
