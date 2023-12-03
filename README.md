@@ -46,4 +46,3 @@ Here's a quick overview of what you'll find in our documentation:
 
 8. **Readme.md**
    - The one you are reading here.   
-
