@@ -32,10 +32,9 @@ i
  )+b)
 
 
- ```
+ ```math
 [ \text{Output} = f(\sum_{i=1}^{n} (w_i \cdot x_i) + b) ]
 
-// LaTeX Expression
 ```
 
 Where:
