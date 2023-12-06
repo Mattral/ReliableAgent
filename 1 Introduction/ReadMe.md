@@ -79,9 +79,8 @@ N−1
 ​
  (x))…))
 
- ```
+ ```math
 \[ y = f_N(f_{N-1}(\ldots f_2(f_1(x))\ldots)) \]
-//LaTeX expression
 ```
 
 Where:
