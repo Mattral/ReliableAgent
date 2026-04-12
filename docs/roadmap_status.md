@@ -87,21 +87,58 @@ in `adr/0004-golden-task-suite-design.md`):
    asserting on replan *count*, not just pass/fail, and fixed by making
    the tool fail twice.
 
-## Phases 3-4: not in scope for this delivery
+## Phase 3: Advanced Reliability Features (P1)
+
+Unlike Phases 0-2, the source roadmap gives this phase's 5 bullets with
+almost no further detail. Per your explicit scoping decisions before
+implementation, this delivery prioritized the 3 "core loop" items
+(Critic, Replanner, Guardrails) over Memory/Observability enhancements,
+and "stronger Critic" concretely means both step-level critique AND
+multi-criteria scoring.
+
+| Requirement | Status | Notes |
+|---|---|---|
+| Stronger Critic with process supervision | ✅ | `planner/process_critic.py`: `DeterministicProcessCritic` (heuristic, free) and `LLMProcessCritic` (LLM-backed), both implementing the new `Critic.critique_step()` extension point for per-step verdicts AND multi-criteria (`correctness`/`efficiency`/`safety`) scoring via the new `CriterionScores` model. Backward-compatible: every Phase 0-2 `Critic` still works unchanged. |
+| More sophisticated Replanner | ✅ | `planner/replanner.py`: `Replanner` classifies *why* a replan is needed (`FailureType`: repeated tool failure / low-quality progress / ambiguous-or-underspecified / budget nearly exhausted) and delegates to a matching `ReplanStrategy`, each producing a concretely actionable hint rather than a generic re-prompt. The budget-exhaustion strategy also shrinks the next plan's `max_steps` as attempts run low — both halves of your scoping decision (strategy-by-failure-type AND budget-awareness) are implemented together in one component. Wired as the Orchestrator's **default** replanning behavior, not an opt-in. |
+| Enhanced Guardrail strategies (policy-based, output filtering) | ✅ | `guardrails/policy.py`: `PolicyGuardrail` + structured, named, scoped `PolicyRule`s (BLOCK or MODIFY, regex-based). `guardrails/output_filter.py`: `OutputFilterGuardrail`, MODIFY-only, with a built-in PII pattern library (email, US phone, US SSN, credit card). Both are genuinely more capable than Phase 0/1's flat substring-matching `BasicGuardrail`, not a renaming of it. |
+| More sophisticated Memory (versioning, etc.) | ⬜ | Not attempted — explicitly deprioritized per your scoping decision in favor of the 3 items above. `FileMemoryBackend`/`InMemoryBackend` from Phase 1 are unchanged. |
+| Enhanced Observability (richer analysis) | 🟡 | One real addition: the new `step_critiqued` event type and `Tracer.emit_step_critiqued`, emitted whenever a process-supervision Critic produces a `StepCritique`. No broader observability enhancement (dashboards, richer aggregation) was attempted beyond this, consistent with deprioritizing this bullet. |
+
+**Two real, pre-existing bugs found and fixed while building this phase**
+(full detail in `adr/0005-phase3-critic-replanner-guardrails.md`):
+1. `Orchestrator._guard()` computed and logged a guardrail's MODIFY
+   verdict (e.g. PII redaction) but never applied it to what the run
+   actually returns — `trajectory.final_answer` silently kept the
+   original, unredacted text. Existed since Phase 0/1; had zero
+   observable effect until this phase's `OutputFilterGuardrail` became
+   the first guardrail whose entire purpose is MODIFY. Fixed and
+   regression-tested.
+2. A run that completed via an explicit `final_answer` step (the common
+   case) never called `Critic.critique()` at all — `Trajectory.feedbacks`
+   was empty for most successful runs, regardless of Critic. Fixed by
+   adding a final critique call on that path, which is a genuine,
+   documented behavioral change: every successful run now makes one
+   additional `Critic.critique()` call (free for heuristic Critics, one
+   extra LLM call for `LLMCritic`/`LLMProcessCritic`).
+
+## Phase 4: not in scope for this delivery
+
+The plugin/distribution ecosystem and multi-agent coordination (if and
+where the source roadmap specifies them beyond this document's visibility)
+were not attempted.
 
 ## The most important caveat, stated plainly
 
-This delivery's **test suite (140 tests: 76 unit + 8 integration + 56
+This delivery's **test suite (207 tests: 135 unit + 16 integration + 56
 evaluation) genuinely runs and genuinely passes** — that was independently
 verified multiple times during development, including after every bug fix
-(two of which are documented in detail in `adr/0004` precisely because the
-suite caught them). What did **not** run even once, anywhere, in this
-delivery: `ruff`, `mypy`, `pytest` (the real package, as opposed to the
-offline shim runner built to substitute for it), `pre-commit`, the GitHub
-Actions CI workflow, and any real LLM provider (the entire evaluation
-suite, including the comparison tool, has only ever run against
-`MockLLMClient`). All of these are fully configured/supported and, based
-on careful manual review, expected to work — but "expected to work" and
+(two of which are documented in detail in `adr/0004`, two more in
+`adr/0005`, precisely because the suite caught them). What did **not** run
+even once, anywhere, in this delivery: `ruff`, `mypy`, `pytest` (the real
+package, as opposed to the offline shim runner built to substitute for
+it), `pre-commit`, the GitHub Actions CI workflow, and any real LLM
+provider. All of these are fully configured/supported and, based on
+careful manual review, expected to work — but "expected to work" and
 "verified to work" are different claims, and this document deliberately
 does not blur that line. If you have network access, the single most
 valuable next steps are:
