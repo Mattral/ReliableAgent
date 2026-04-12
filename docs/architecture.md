@@ -221,3 +221,50 @@ constructor call (`llm_client_builder`, threaded through `evaluation/
 factory.py::build_standard_factory`) — nothing about the golden tasks,
 graders, metrics, or comparison tool needs to know or care which LLM
 backend actually produced a given run's plan.
+
+## 10. Phase 3: extension points, not replacements
+
+Every Phase 3 capability was added as an opt-in extension to an existing
+contract, never a breaking redefinition of one — this is the same
+"Explicit Contracts" discipline from section 1, applied to evolving a
+contract after the fact rather than just defining one upfront.
+
+`Critic.critique_step()` is the clearest example: it's a concrete method
+on the `Critic` ABC with a default body that returns `None`, not an
+abstract method every subclass is forced to implement. A `ThresholdCritic`
+written in Phase 1, with zero changes, remains a fully valid `Critic` in
+a system that now also supports step-level process supervision — it just
+has nothing to say at that extension point. The Orchestrator's
+`_execute_step` calls `critique_step()` unconditionally and only attaches
+a `StepCritique` to a `StepRecord` when one comes back non-`None`, so a
+Phase 0-2-style `Trajectory` is byte-for-byte indistinguishable from one
+produced by a Critic that simply chooses not to use the new capability.
+
+`Replanner` follows the same pattern one layer up: it's not a
+replacement for `Planner`, it's a thing that *uses* a `Planner` — the
+Orchestrator's constructor defaults to wrapping whatever `Planner` it's
+given in a `Replanner`, but a caller who passes their own `replanner=`
+(or, hypothetically, monkey-patches `Orchestrator._replanner` to skip it
+entirely) doesn't lose access to plain `Planner.plan()` semantics; the
+`Replanner` only ever calls that same method with a shaped hint and
+(optionally) an adjusted `Task`.
+
+This pattern — new capability arrives as something existing components
+can be wrapped in or extended with, never as a required reimplementation
+— is also why `PolicyGuardrail` and `OutputFilterGuardrail` are ordinary
+`Guardrail` subclasses rather than a new guardrail *protocol*: the
+`GuardrailRunner` that chains them, and the `Orchestrator` boundaries that
+invoke that runner, needed zero changes to support two genuinely new
+guardrail behaviors (structured multi-rule policy matching, and PII
+redaction), because the contract they implement was already expressive
+enough (`check() -> GuardrailDecision`, ALLOW/BLOCK/MODIFY) to carry them.
+
+The one Phase 3 change that *did* alter existing runtime behavior — every
+successful run now makes one additional `Critic.critique()` call, fixing
+the bug where `Trajectory.feedbacks` was silently empty on the common
+completion path — was not a contract change at all; `Critic.critique()`'s
+signature and meaning are unchanged. It's a control-flow fix in the
+Orchestrator's loop, and is treated with corresponding care: documented
+as a named, numbered bug in `adr/0005`, not folded silently into "Phase 3
+adds process supervision" framing where a reader could easily miss that
+it affects every Critic, including ones written before this phase existed.
