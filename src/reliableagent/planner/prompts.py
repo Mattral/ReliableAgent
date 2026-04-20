@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 
 from reliableagent.executor.tool_registry import ToolRegistry
-from reliableagent.core.models import ToolResult
+from reliableagent.core.models import PlanStep, ToolResult
 
 PLANNER_SYSTEM_PROMPT = """You are the Planner component of an autonomous agent framework.
 Given a task and a list of available tools, produce a step-by-step plan to \
@@ -111,6 +111,65 @@ def build_critic_user_prompt(
         f"Plan:\n{plan_summary}\n\n"
         f"Execution results so far:\n{results_block}\n\n"
         "Respond with the JSON assessment now."
+    )
+
+
+PROCESS_CRITIC_SYSTEM_PROMPT = """You are the Process-Supervision Critic component of an \
+autonomous agent framework. Given a plan and the results of executing it so far, assess \
+the trajectory along THREE separate criteria, rather than a single overall score.
+
+You MUST respond with ONLY a single JSON object (no markdown fences, no \
+commentary) matching exactly this schema:
+
+{
+  "correctness": <float 0.0-1.0, did this achieve what it should have?>,
+  "efficiency": <float 0.0-1.0, was this accomplished without excess steps/waste?>,
+  "safety": <float 0.0-1.0, did this stay clear of policy/safety concerns?>,
+  "should_replan": <true or false>,
+  "issues": ["<short description of any problems found>", ...],
+  "rationale": "<brief explanation of your assessment, addressing all three criteria>"
+}"""
+
+
+def build_process_critic_user_prompt(
+    task_description: str, plan_summary: str, results: list[ToolResult]
+) -> str:
+    """Construct the user-turn prompt sent to the process-supervision Critic's LLM."""
+    results_lines = []
+    for r in results:
+        status = "succeeded" if r.success else "FAILED"
+        results_lines.append(f"  - {status}: {r.output if r.success else r.error}")
+    results_block = "\n".join(results_lines) if results_lines else "(no steps executed yet)"
+
+    return (
+        f"Task: {task_description}\n\n"
+        f"Plan:\n{plan_summary}\n\n"
+        f"Execution results so far:\n{results_block}\n\n"
+        "Assess correctness, efficiency, and safety separately, then respond with the "
+        "JSON assessment now."
+    )
+
+
+STEP_CRITIQUE_SYSTEM_PROMPT = """You are performing process supervision: assessing a single \
+step of an autonomous agent's plan immediately after it completed, in isolation.
+
+You MUST respond with ONLY a single JSON object (no markdown fences, no \
+commentary) matching exactly this schema:
+
+{
+  "verdict": <true if this step looks acceptable on its own, false if it raises a concern>,
+  "concern": "<specific issue noticed, empty string if verdict is true>"
+}"""
+
+
+def build_step_critique_user_prompt(step: PlanStep, result: ToolResult) -> str:
+    """Construct the user-turn prompt sent to the step-level critique LLM call."""
+    status = "succeeded" if result.success else "FAILED"
+    outcome = result.output if result.success else result.error
+    return (
+        f"Step: [{step.step_type.value}] {step.description}\n"
+        f"Outcome: {status} -> {outcome}\n\n"
+        "Respond with the JSON verdict now."
     )
 
 

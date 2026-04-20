@@ -22,6 +22,7 @@ if TYPE_CHECKING:
         GuardrailDecision,
         Plan,
         PlanStep,
+        StepCritique,
         ToolCall,
         ToolResult,
     )
@@ -77,6 +78,16 @@ class Tracer:
         self._emit(
             EventType.STEP_COMPLETED,
             {"step_id": step.step_id, "status": status},
+        )
+
+    def emit_step_critiqued(self, step_critique: "StepCritique") -> None:
+        self._emit(
+            EventType.STEP_CRITIQUED,
+            {
+                "step_id": step_critique.step_id,
+                "verdict": step_critique.verdict,
+                "concern": step_critique.concern,
+            },
         )
 
     def emit_tool_call_started(self, call: "ToolCall") -> None:

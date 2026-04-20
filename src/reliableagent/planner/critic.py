@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from reliableagent.core.models import Feedback, Plan, Task, ToolResult
+from reliableagent.core.models import Feedback, Plan, PlanStep, StepCritique, Task, ToolResult
 from reliableagent.exceptions import ReliableAgentError
 from reliableagent.llm.base import LLMClient, LLMMessage
 from reliableagent.planner.prompts import (
@@ -37,6 +37,23 @@ class Critic(ABC):
             A `Feedback` with `plan_id` set to `plan.plan_id`.
         """
         raise NotImplementedError
+
+    def critique_step(self, step: PlanStep, result: ToolResult | None) -> StepCritique | None:
+        """Optionally assess a single step immediately after it completes.
+
+        This is what turns Critic supervision into *process* supervision
+        (per Phase 3) rather than purely outcome supervision: a problem
+        can be flagged at the moment a step happens, not only inferred
+        later from an aggregate end-of-plan `quality_score`.
+
+        The default implementation returns `None` (no per-step opinion),
+        which keeps every Phase 0-2 `Critic` subclass — `ThresholdCritic`,
+        `LLMCritic` — fully valid without any change: a `Critic` that
+        doesn't override this method simply opts out of step-level
+        supervision, and the Orchestrator treats a `None` return as "this
+        Critic has nothing to say about this step," not as an error.
+        """
+        return None
 
 
 class ThresholdCritic(Critic):
