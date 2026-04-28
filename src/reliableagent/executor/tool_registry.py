@@ -40,6 +40,7 @@ class ToolSpec:
     argument_model: type[BaseModel] | None
     timeout_seconds: float = 30.0
     is_async: bool = field(default=False)
+    result_validator: object = None
 
     def to_prompt_schema(self) -> dict[str, Any]:
         """Render a compact, planner-friendly description of this tool.
@@ -83,6 +84,7 @@ class ToolRegistry:
         description: str = "",
         argument_model: type[BaseModel] | None = None,
         timeout_seconds: float = 30.0,
+        result_validator=None,
     ) -> Callable[..., Any]:
         """Register a tool, usable either as a decorator or a direct call.
 
@@ -107,6 +109,7 @@ class ToolRegistry:
                 argument_model=argument_model,
                 timeout_seconds=timeout_seconds,
                 is_async=inspect.iscoroutinefunction(fn),
+                result_validator=result_validator,
             )
             self._tools[tool_name] = spec
             return fn
@@ -135,6 +138,18 @@ class ToolRegistry:
     def list_specs(self) -> list[ToolSpec]:
         """Return all registered tool specs, for prompt construction."""
         return list(self._tools.values())
+
+    def validate_result(self, name: str, result) -> bool:
+        """Run the registered result_validator (if any) against a successful call's output.
+        Returns True when no validator is registered (trust-by-default), or False when
+        the validator rejects the output or itself raises."""
+        spec = self.get(name)
+        if spec.result_validator is None:
+            return True
+        try:
+            return bool(spec.result_validator(result))
+        except Exception:
+            return False
 
     def validate_arguments(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Validate `arguments` against the tool's declared argument model, if any.
