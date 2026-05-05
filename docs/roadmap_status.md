@@ -144,15 +144,46 @@ invisible without actually measuring it, which is itself the core
 argument for why "performance profiling" earns a place on this roadmap
 rather than being assumed-fine because the test suite is green.
 
+## Post-Delivery Audit: gaps found by re-reading the roadmap against the code
+
+After the Phase 0-4 delivery above, a self-audit re-read the full original
+roadmap against the actual code (not against this project's own prior
+summaries) and found several real gaps earlier status updates had NOT
+flagged — distinct from the already-documented "tools never ran" caveat.
+All were fixed in this pass; each is detailed in its own ADR.
+
+| Gap found | Status | ADR |
+|---|---|---|
+| Package had never been built or installed, even once — `hatchling` was declared but unavailable offline | ✅ Fixed: switched to `setuptools` (available offline), added `scripts/verify_build.py` which builds a real wheel, installs into a fresh venv, and runs a real Orchestrator loop against the installed copy | `adr/0007` |
+| `RunMetrics` had no token usage or LLM latency fields, despite section 4.2 explicitly requiring them | ✅ Fixed: `LLMUsageStats`/`UsageTrackingLLMClient` decorator + optional `usage_tracker=` on `Orchestrator`, with correct per-run delta computation (not lifetime-cumulative) | `adr/0009` |
+| Tool *output* was never validated, only tool *input* arguments — `ToolResult.validated` was hardcoded `True` | ✅ Fixed: `result_validator` on `ToolRegistry.register()`, wired into `Executor` as a retryable failure mode | `adr/0009` |
+| `ReliableOrchestrator`/`EvaluationHarness` (the roadmap's own illustrative DX example) didn't exist; `ToolRegistry` wasn't even exported from the top-level package | ✅ Fixed: both added as genuine convenience wrappers (not aliases) around the real `Orchestrator`/evaluation machinery; `examples/roadmap_dx_example.py` reproduces the roadmap's example almost verbatim and is verified to pass 100% (60/60) | `adr/0008` |
+| No sandboxing (tools run in plain threads, no process isolation/resource limits) | ⬜ Still not implemented — a genuinely large, separate undertaking; documented honestly in `executor.py`'s own module docstring rather than silently accepted | — |
+| No distributed tracing / spans | ⬜ Still not implemented — only flat structured events exist | — |
+| Memory has no "selective retrieval" (query/filter), only full load-by-ID | ⬜ Still not implemented | — |
+| Test coverage percentage never measured (no `coverage` module available offline) | ⬜ Still unmeasured — same offline-tooling constraint as ruff/mypy/pytest | — |
+
+**A genuinely valuable bug this audit pass's OWN testing caught**: the
+first implementation of `EvaluationHarness`'s mock-backed path built one
+scripted `Orchestrator` per golden task and reused it across every seed,
+silently exhausting `MockLLMClient`'s finite response queue after the
+first seed and failing every subsequent seed with a spurious planning
+error. This looked entirely correct under `seeds=[0]` — the case most
+manual testing used — and only surfaced when
+`examples/roadmap_dx_example.py` was run with `seeds=[42, 43, 44]`,
+matching the roadmap's own illustrative example. Fixed and
+regression-tested; full story in `adr/0008`.
+
 ## The most important caveat, stated plainly
 
-This delivery's **test suite (210 tests: 138 unit + 16 integration + 56
+This delivery's **test suite (242 tests: 151 unit + 27 integration + 64
 evaluation) genuinely runs and genuinely passes** — that was independently
 verified multiple times during development, including after every bug fix
 (two of which are documented in detail in `adr/0004`, two more in
-`adr/0005`, and a performance bug in `adr/0006`, precisely because the
-suite — and, for the performance bug, an isolated microbenchmark — caught
-them). What did **not** run even once, anywhere, in this delivery:
+`adr/0005`, a performance bug in `adr/0006`, and a real package-build gap
+plus two DX/metrics gaps plus a multi-seed test-queue bug found during a
+post-delivery audit, documented in `adr/0007`-`adr/0009`). What did
+**not** run even once, anywhere, in this delivery:
 `ruff`, `mypy`, `pytest` (the real package, as opposed to the offline
 shim runner built to substitute for it), `pre-commit`, the GitHub Actions
 CI workflow, and any real LLM provider. All of these are fully
