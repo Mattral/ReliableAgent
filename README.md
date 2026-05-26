@@ -16,11 +16,14 @@ and recover.
 > every architectural boundary, checkpoint/resume, a curated 20-task
 > golden suite with the five required reliability metrics, a
 > configuration-comparison tool, multi-criteria + step-level Critic
-> supervision, failure-type-aware replanning, and a passing test suite
-> (210 tests, unit + integration + evaluation). Multi-agent coordination
-> beyond what's described here is intentionally out of scope for this
-> delivery — see [`docs/roadmap_status.md`](docs/roadmap_status.md) for
-> exactly what's done, what's stubbed, and what's not started.
+> supervision, failure-type-aware replanning, real token/latency metrics,
+> tool output validation, and a passing test suite (242 tests, unit +
+> integration + evaluation). A **post-delivery self-audit** (re-reading
+> the roadmap against the actual code, not against prior summaries) found
+> and fixed several additional gaps — including that the package had
+> never actually been built or installed even once — documented plainly
+> in [`docs/roadmap_status.md`](docs/roadmap_status.md), which also lists
+> exactly what's still stubbed or not started.
 
 ## Why this exists
 
@@ -47,10 +50,12 @@ when it doesn't?* Concretely, that means:
 
 ```bash
 pip install -e ".[dev]"          # editable install + dev tooling
+python scripts/verify_build.py   # build a real wheel, install into a fresh venv, verify it works
 python scripts/run_tests.py      # run the test suite (uses real pytest if
                                   # installed, else a bundled offline runner)
 python examples/quickstart.py    # a runnable, narrated walkthrough
 python examples/advanced_reliability.py      # Phase 3: process supervision, replanning, guardrails
+python examples/roadmap_dx_example.py        # this roadmap's own DX example, made to actually run
 python examples/run_evaluation.py            # one-command evaluation: metrics + failure analysis
 python examples/compare_configurations.py    # quantitative before/after comparison across configs
 python examples/profile_performance.py --no-retry-backoff   # where does time actually go?
@@ -203,6 +208,48 @@ section 11.
 python examples/profile_performance.py --no-retry-backoff --repeat 5
 ```
 
+## A post-delivery audit found real gaps — here's what changed
+
+After the four phases above, a self-audit re-read the roadmap against the
+actual code and found gaps that earlier status docs hadn't caught,
+including one big one: **the package had never actually been built or
+installed, not even once**, in this project's entire development
+history. `scripts/verify_build.py` now actually builds a wheel, installs
+it into a fresh virtual environment, and runs a real `Orchestrator` loop
+against the installed copy — not the `src/` checkout. Also added:
+`RunMetrics` now carries real token usage and LLM latency
+(`LLMUsageStats`/`UsageTrackingLLMClient`); tool *output* is now actually
+validated, not just tool input (`result_validator=` on
+`ToolRegistry.register`); and `ReliableOrchestrator`/`EvaluationHarness`
+were added as genuine, tested convenience wrappers matching this
+roadmap's own illustrative usage example almost verbatim:
+
+```python
+from reliableagent import ReliableOrchestrator, ToolRegistry
+from reliableagent.guardrails import BasicGuardrail
+from reliableagent.evaluation import EvaluationHarness
+
+orchestrator = ReliableOrchestrator(
+    model="claude-sonnet-4-6",  # or llm_client=... for a mock/custom client
+    tools=tools,
+    guardrails=[BasicGuardrail()],
+    enable_checkpointing=True,
+    enable_observability=True,
+)
+result = orchestrator.run(task="...", max_steps=20)
+
+harness = EvaluationHarness(orchestrator=orchestrator)
+results = harness.evaluate(task_set="golden_suite_v1", seeds=[42, 43, 44])
+print(results.summary())
+print(results.failure_analysis())
+```
+
+Run it: `python examples/roadmap_dx_example.py`. Full accounting of every
+gap found (fixed and still-open) in
+[`docs/roadmap_status.md`](docs/roadmap_status.md)'s "Post-Delivery
+Audit" section, and in
+[`adr/0007`](adr/0007-package-build-verification.md)-[`0009`](adr/0009-token-metrics-and-output-validation.md).
+
 ## Project layout
 
 ```
@@ -234,12 +281,12 @@ src/reliableagent/
   exceptions/       The full exception hierarchy (recoverable vs not).
   _compat/          See "A note on the dependency situation" below.
 tests/
-  unit/             Fast, isolated tests per component (138 tests).
+  unit/             Fast, isolated tests per component (151 tests).
   integration/      Full Orchestrator runs against real components,
-                    LLM-mocked only (16 tests).
+                    LLM-mocked only (27 tests).
   eval/             Phase 2 tests: metrics math, the golden suite running
                     against the real Orchestrator, configuration comparison,
-                    and failure analysis (56 tests).
+                    and failure analysis (64 tests).
 examples/           Runnable, narrated example scripts.
 adr/                Architecture Decision Records for the non-obvious calls.
 docs/                Architecture deep-dive + exact roadmap completion status.
@@ -273,15 +320,22 @@ changes to run under real pytest.
 ## What's deliberately NOT here yet
 
 See [`docs/roadmap_status.md`](docs/roadmap_status.md) for the full,
-itemized comparison against every requirement in the original roadmap.
-Briefly: multi-agent coordination and the plugin/distribution ecosystem
-(Phase 4) are not implemented. `OutputFilterGuardrail`'s PII detection is
-regex-based, not an ML classifier — documented honestly as a known
-limitation, not oversold. The architecture is designed so Phase 4 can be
-added as new modules without breaking the existing P0/P1/P2/P3
-contracts — e.g. a new `Guardrail` subclass or `Planner` subclass plugs
-in without touching the `Orchestrator`, and a new `ReplanStrategy` plugs
-into the existing `Replanner` without changes to either.
+itemized comparison against every requirement in the original roadmap,
+including a "Post-Delivery Audit" section covering gaps a self-review
+found after the initial four-phase delivery. Briefly, still not
+implemented: multi-agent coordination and the plugin/distribution
+ecosystem; sandboxing (tools run in plain threads, no process isolation
+or resource limits); distributed tracing/spans (only flat structured
+events exist); selective retrieval in Memory backends (only full
+load-by-ID); and test coverage percentage has never been measured (no
+`coverage` module available offline, same constraint as ruff/mypy/pytest).
+`OutputFilterGuardrail`'s PII detection is regex-based, not an ML
+classifier — documented honestly as a known limitation, not oversold.
+The architecture is designed so all of the above can be added as new
+modules without breaking existing contracts — e.g. a new `Guardrail`
+subclass or `Planner` subclass plugs in without touching the
+`Orchestrator`, and a new `ReplanStrategy` plugs into the existing
+`Replanner` without changes to either.
 
 ## License
 
