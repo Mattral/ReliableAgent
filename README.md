@@ -1,72 +1,58 @@
 # ReliableAgent
 
-A reliability-first orchestration framework for building agentic systems
-that don't just *work in the demo* — they fail safely, explain themselves,
-and recover.
-
-> **Scope of this build.** This repository implements **Phase 0
-> (Foundations), Phase 1 (Core Orchestration), Phase 2 (Evaluation
-> Harness & Reliability Measurement), Phase 3 (Advanced Reliability
-> Features: process-supervision Critic, strategy-driven Replanner,
-> policy/output-filtering Guardrails), and Phase 4 (Polish, Documentation
-> & Impact: performance profiling with a measured 4.85x fix, and this
-> documentation set itself)** of the full ReliableAgent roadmap, to a
-> production-shape standard: real typed contracts, a working
-> plan → execute → critique → replan control loop, guardrails enforced at
-> every architectural boundary, checkpoint/resume, a curated 20-task
-> golden suite with the five required reliability metrics, a
-> configuration-comparison tool, multi-criteria + step-level Critic
-> supervision, failure-type-aware replanning, real token/latency metrics,
-> tool output validation, and a passing test suite (242 tests, unit +
-> integration + evaluation). A **post-delivery self-audit** (re-reading
-> the roadmap against the actual code, not against prior summaries) found
-> and fixed several additional gaps — including that the package had
-> never actually been built or installed even once — documented plainly
-> in [`docs/roadmap_status.md`](docs/roadmap_status.md), which also lists
-> exactly what's still stubbed or not started.
-
-## Why this exists
+**A reliability-first orchestration framework for agentic systems.**
 
 Most agent frameworks optimize for "it worked in the demo." ReliableAgent
-optimizes for the second question every team asks after that: *what happens
-when it doesn't?* Concretely, that means:
+optimizes for the question every team asks right after that: *what happens
+when it doesn't?* Guardrails are enforced at every boundary, not bolted on.
+Failures are typed data in the trajectory, not log lines to grep for.
+Every run is checkpointed and fully reconstructable. Long tasks can be
+killed and resumed without re-planning from scratch.
 
-- **Guardrails are not a wrapper.** Every Planner input/output, every tool
-  call's input/output, and the final answer pass through a configurable
-  `GuardrailRunner` before they're trusted. A blocked guardrail check halts
-  the transition — it never silently passes through.
-- **Failure is data, not just an exception.** Tool failures, guardrail
-  blocks, and replans are first-class, typed events in the trajectory, not
-  log lines you have to grep for after the fact.
-- **Every run is fully reconstructable.** Plans, step results, guardrail
-  decisions, critic feedback, and checkpoints are all recorded in a single
-  `Trajectory` object you can serialize, diff, and replay.
-- **Long-running tasks can be killed and resumed.** Checkpoints are saved
-  after every plan and step; `orchestrator.resume(run_id)` picks up exactly
-  where a killed process left off, without re-calling the LLM for a plan it
-  already had.
+247 tests. Zero required dependencies beyond Pydantic. Runs offline out of
+the box.
 
-## Quickstart
+---
+
+## Table of contents
+
+- [Install](#install)
+- [60-second quickstart](#60-second-quickstart)
+- [Why ReliableAgent](#why-reliableagent)
+- [Architecture at a glance](#architecture-at-a-glance)
+- [Measuring reliability, not just claiming it](#measuring-reliability-not-just-claiming-it)
+- [Process supervision, smarter replanning, redaction](#process-supervision-smarter-replanning-redaction)
+- [Performance, measured](#performance-measured)
+- [The convenience API](#the-convenience-api)
+- [Examples](#examples)
+- [Project layout](#project-layout)
+- [Development](#development)
+- [A note on dependencies](#a-note-on-dependencies)
+- [Honest status: what's here, what isn't](#honest-status-whats-here-what-isnt)
+- [Changelog](#changelog)
+- [License](#license)
+
+---
+
+## Install
 
 ```bash
-pip install -e ".[dev]"          # editable install + dev tooling
-python scripts/verify_build.py   # build a real wheel, install into a fresh venv, verify it works
-python scripts/run_tests.py      # run the test suite (uses real pytest if
-                                  # installed, else a bundled offline runner)
-python examples/quickstart.py    # a runnable, narrated walkthrough
-python examples/advanced_reliability.py      # Phase 3: process supervision, replanning, guardrails
-python examples/roadmap_dx_example.py        # this roadmap's own DX example, made to actually run
-python examples/run_evaluation.py            # one-command evaluation: metrics + failure analysis
-python examples/compare_configurations.py    # quantitative before/after comparison across configs
-python examples/profile_performance.py --no-retry-backoff   # where does time actually go?
+pip install -e ".[dev]"
 ```
+
+Requires Python ≥3.10. That's it — Pydantic v2 is the only runtime
+dependency, and `MockLLMClient` means you can run everything below without
+an API key. See [A note on dependencies](#a-note-on-dependencies) for how
+this repo behaves with or without Pydantic installed.
+
+## 60-second quickstart
 
 ```python
 from reliableagent import Orchestrator, Task
-from reliableagent.llm import MockLLMClient
-from reliableagent.planner import LLMPlanner, ThresholdCritic
 from reliableagent.executor import ToolRegistry
 from reliableagent.guardrails import BasicGuardrail
+from reliableagent.llm import MockLLMClient
+from reliableagent.planner import LLMPlanner, ThresholdCritic
 
 tools = ToolRegistry()
 
@@ -86,7 +72,7 @@ print(result.final_answer)   # "The sum of 2 and 3 is 5."
 print(result.metrics)        # RunMetrics(total_steps=2, total_tool_calls=1, ...)
 ```
 
-To use a real LLM instead of the deterministic mock:
+To use a real model instead of the deterministic mock:
 
 ```python
 from reliableagent.llm import AnthropicLLMClient
@@ -96,6 +82,38 @@ planner = LLMPlanner(AnthropicLLMClient(model="claude-sonnet-4-6"))
 
 (requires `pip install 'reliableagent[anthropic]'` and an `ANTHROPIC_API_KEY`
 in the environment, or pass `api_key=...` explicitly.)
+
+Prefer fewer moving parts up front? See [The convenience API](#the-convenience-api)
+for `ReliableOrchestrator`, a higher-level wrapper with the same
+capabilities behind simpler flags.
+
+Then, run the test suite and a narrated walkthrough:
+
+```bash
+python scripts/run_tests.py      # 247 tests, uses real pytest if installed
+python examples/quickstart.py    # 4 scenarios: happy path, recovery, a
+                                  # blocked guardrail, checkpoint/resume
+```
+
+## Why ReliableAgent
+
+- **Guardrails are not a wrapper.** Every Planner input/output, every tool
+  call's input/output, and the final answer pass through a configurable
+  `GuardrailRunner` before they're trusted. A blocked check halts the
+  transition — it never silently passes through.
+- **Failure is data, not just an exception.** Tool failures, guardrail
+  blocks, and replans are first-class, typed events in the trajectory, not
+  something you have to grep logs for after the fact.
+- **Every run is fully reconstructable.** Plans, step results, guardrail
+  decisions, critic feedback, and checkpoints are all recorded in a single
+  `Trajectory` object you can serialize, diff, and replay.
+- **Long-running tasks can be killed and resumed.** Checkpoints are saved
+  after every plan and step; `orchestrator.resume(run_id)` picks up
+  exactly where a killed process left off, without re-calling the LLM for
+  a plan it already had.
+- **Reliability claims are numbers, not adjectives.** A 20-task golden
+  suite with 5 standard metrics, plus a tool to compare configurations
+  side by side — see [below](#measuring-reliability-not-just-claiming-it).
 
 ## Architecture at a glance
 
@@ -121,16 +139,15 @@ Every box above also writes to: the `Trajectory` (the durable, structured
 history of the run), a `Checkpoint` (so the run can be resumed), and the
 `Tracer` (structured observability events). See
 [`docs/architecture.md`](docs/architecture.md) for the full breakdown of
-every module and the design decisions behind it, and
-[`adr/`](adr) for the specific tradeoffs that were deliberated, not just
-assumed.
+every module and the design decisions behind it, and [`adr/`](adr) for
+the specific tradeoffs that were deliberated, not just assumed.
 
 ## Measuring reliability, not just claiming it
 
-Phase 2 adds a curated suite of 20 "golden tasks" spanning 5 categories
-(arithmetic, fact lookup, failure recovery, guardrail enforcement, text
-processing), each with a known-correct outcome and grader. Running it
-computes five metrics:
+A curated suite of 20 "golden tasks" spans 5 categories (arithmetic, fact
+lookup, failure recovery, guardrail enforcement, text processing), each
+with a known-correct outcome and grader. Running it computes five
+standard reliability metrics:
 
 ```
 $ python examples/run_evaluation.py
@@ -144,9 +161,9 @@ By category:
   ...
 ```
 
-And `examples/compare_configurations.py` runs the same suite under several
+`examples/compare_configurations.py` runs the same suite under several
 named configurations (guardrail strictness, Critic strategy, executor
-retry settings) side by side, so a claim like "stricter guardrails improve
+retry settings) side by side, so "stricter guardrails improve
 reliability" is a number, not an assertion:
 
 ```
@@ -156,73 +173,67 @@ guardrails_lenient              90.0%       85.7%         0.30          5.0%
 guardrails_standard            100.0%      100.0%         0.30         15.0%
 ```
 
-The suite runs entirely offline against `MockLLMClient` by default (so
-it's free, fast, and a genuine regression test of the orchestration
-engine itself); pass `--use-real-anthropic-model` to run the identical
-tasks and graders against a live model instead. See
-[`adr/0004-golden-task-suite-design.md`](adr/0004-golden-task-suite-design.md)
-for why it's built this way, including two real bugs this design caught.
+The suite runs entirely offline against `MockLLMClient` by default (free,
+fast, and a genuine regression test of the orchestration engine itself);
+pass `--use-real-anthropic-model` to run the identical tasks and graders
+against a live model. See
+[`adr/0004`](adr/0004-golden-task-suite-design.md) for why it's built
+this way, including two real bugs this design caught during development.
 
-## Going beyond pass/fail: process supervision, smarter replanning, redaction
+## Process supervision, smarter replanning, redaction
 
-Phase 3 adds three things to the core loop, all enabled by default
-(nothing here is an opt-in a caller has to discover):
+Three things layer onto the core loop, all enabled by default — nothing
+here is an opt-in you have to discover:
 
 - **Process-supervision Critics** (`DeterministicProcessCritic`,
   `LLMProcessCritic`) score every plan on three separate criteria —
   correctness, efficiency, safety — instead of one blended number, and
   flag individual steps as they happen, not just at the end of a plan.
 - **A strategy-driven `Replanner`** classifies *why* a replan is needed
-  (a tool kept failing vs. progress just stalled vs. budget is nearly
-  exhausted) and shapes a different, concretely actionable hint for each
-  case — including deliberately shrinking the next plan's ambition once
-  few replan attempts remain.
+  (a tool kept failing vs. progress stalled vs. budget nearly exhausted)
+  and shapes a concretely actionable hint for each case, including
+  deliberately shrinking the next plan's ambition once few attempts
+  remain.
 - **`PolicyGuardrail`** (structured, named, scoped rules — block or
   redact) and **`OutputFilterGuardrail`** (built-in regex-based PII
-  redaction for emails, phone numbers, SSNs, and card numbers) extend the
-  guardrail layer beyond Phase 0/1's substring matching.
+  redaction for emails, phone numbers, SSNs, and card numbers) extend
+  guardrails beyond simple substring matching.
 
-Building this phase surfaced two real, pre-existing bugs in the
-Orchestrator — a guardrail's redaction was being computed and logged but
-never actually applied to what a run returns, and successful runs were
-silently skipping the Critic entirely. Both are fixed and regression-
-tested; full story in
-[`adr/0005-phase3-critic-replanner-guardrails.md`](adr/0005-phase3-critic-replanner-guardrails.md).
+```bash
+python examples/advanced_reliability.py
+```
 
-## Performance: measured, not assumed
+Building this surfaced two real, pre-existing bugs — a guardrail's
+redaction was computed and logged but never actually applied to what a
+run returns, and successful runs were silently skipping the Critic
+entirely. Both fixed and regression-tested; full story in
+[`adr/0005`](adr/0005-phase3-critic-replanner-guardrails.md).
+
+## Performance, measured
 
 `examples/profile_performance.py` profiles the full golden suite with
 stdlib `cProfile` and attributes time to architectural layers. It found
-one real, fixable bottleneck: the Pydantic-compatibility shim (see below)
-was re-resolving each class's type hints from scratch on every single
-model construction. Caching it per-class measured a **4.85x speedup** for
-bare model construction (isolated microbenchmark, 50,000 iterations) and
-roughly **3.1x** less total wall-clock time for the full suite. Full
-writeup, including the two alternatives considered and why caching per-
-class rather than eagerly was the right call, in
-[`adr/0006-type-hints-caching-performance-fix.md`](adr/0006-type-hints-caching-performance-fix.md);
-complexity/Big-O notes for every hot path in `docs/architecture.md`
-section 11.
+one real, fixable bottleneck: the Pydantic-compatibility shim (see
+[below](#a-note-on-dependencies)) was re-resolving each class's type
+hints from scratch on every model construction. Caching it per-class
+measured a **4.85x speedup** for bare model construction (isolated
+50,000-iteration microbenchmark) and roughly **3.1x** less wall-clock
+time for the full suite:
 
 ```bash
 python examples/profile_performance.py --no-retry-backoff --repeat 5
 ```
 
-## A post-delivery audit found real gaps — here's what changed
+Full writeup, including alternatives considered, in
+[`adr/0006`](adr/0006-type-hints-caching-performance-fix.md); complexity
+notes for every hot path in `docs/architecture.md` section 11.
 
-After the four phases above, a self-audit re-read the roadmap against the
-actual code and found gaps that earlier status docs hadn't caught,
-including one big one: **the package had never actually been built or
-installed, not even once**, in this project's entire development
-history. `scripts/verify_build.py` now actually builds a wheel, installs
-it into a fresh virtual environment, and runs a real `Orchestrator` loop
-against the installed copy — not the `src/` checkout. Also added:
-`RunMetrics` now carries real token usage and LLM latency
-(`LLMUsageStats`/`UsageTrackingLLMClient`); tool *output* is now actually
-validated, not just tool input (`result_validator=` on
-`ToolRegistry.register`); and `ReliableOrchestrator`/`EvaluationHarness`
-were added as genuine, tested convenience wrappers matching this
-roadmap's own illustrative usage example almost verbatim:
+## The convenience API
+
+`Orchestrator` is the fully explicit, fully composable core — the right
+choice once you need control over Planner/Critic/Memory/Guardrail
+composition. `ReliableOrchestrator` and `EvaluationHarness` are thinner
+wrappers over the same machinery, for quicker setup:
 
 ```python
 from reliableagent import ReliableOrchestrator, ToolRegistry
@@ -244,99 +255,150 @@ print(results.summary())
 print(results.failure_analysis())
 ```
 
-Run it: `python examples/roadmap_dx_example.py`. Full accounting of every
-gap found (fixed and still-open) in
-[`docs/roadmap_status.md`](docs/roadmap_status.md)'s "Post-Delivery
-Audit" section, and in
-[`adr/0007`](adr/0007-package-build-verification.md)-[`0009`](adr/0009-token-metrics-and-output-validation.md).
+```bash
+python examples/roadmap_dx_example.py
+```
+
+Full design rationale — including the one real bug this specific wrapper
+had and fixed (a multi-seed `MockLLMClient` queue-exhaustion issue) — in
+[`adr/0008`](adr/0008-reliable-orchestrator-and-evaluation-harness-dx.md).
+
+## Examples
+
+Every script below is narrated, runs offline in well under a second, and
+needs no API key.
+
+| Script | What it shows |
+|---|---|
+| `examples/quickstart.py` | Core loop: happy path, replanning after a failure, a blocked guardrail, checkpoint/resume |
+| `examples/advanced_reliability.py` | Process-supervision Critics, failure-aware replanning, policy + PII-redaction guardrails |
+| `examples/roadmap_dx_example.py` | `ReliableOrchestrator` + `EvaluationHarness`, matching this project's own design brief almost verbatim |
+| `examples/run_evaluation.py` | One-command evaluation: the 20-task suite, 5 metrics, failure analysis |
+| `examples/compare_configurations.py` | Quantitative before/after comparison across guardrail/critic/executor configs |
+| `examples/profile_performance.py` | Where does the time actually go? `cProfile` + a layer-by-layer breakdown |
 
 ## Project layout
 
 ```
 src/reliableagent/
   core/            Task/Plan/Trajectory/RunResult models, OrchestratorState
-                    machine, and the Orchestrator control loop itself.
+                    machine, the Orchestrator control loop, and
+                    ReliableOrchestrator (the convenience wrapper).
   llm/              Provider-agnostic LLMClient protocol + MockLLMClient
-                    (deterministic, offline) + AnthropicLLMClient (real).
+                    (deterministic, offline) + AnthropicLLMClient (real) +
+                    LLMUsageStats/UsageTrackingLLMClient (token/latency).
   planner/          Planner ABC, LLMPlanner, Critic ABC, ThresholdCritic,
                     LLMCritic, DeterministicProcessCritic/LLMProcessCritic
-                    (Phase 3 process supervision), Replanner + ReplanStrategy
-                    implementations (Phase 3 failure-aware replanning), and
+                    (process supervision), Replanner + ReplanStrategy
+                    implementations (failure-aware replanning), and
                     shared prompt-construction helpers.
-  executor/         ToolRegistry (schema-validated tool registration) and
-                    Executor (timeouts, retries, structured error capture).
+  executor/         ToolRegistry (schema-validated tool registration +
+                    output validation) and Executor (timeouts, retries,
+                    structured error capture).
   guardrails/       Guardrail ABC, BasicGuardrail + 2 focused guardrails,
-                    PolicyGuardrail (Phase 3: structured rule-based policy),
-                    OutputFilterGuardrail (Phase 3: PII redaction), and the
+                    PolicyGuardrail (structured rule-based policy),
+                    OutputFilterGuardrail (PII redaction), and the
                     GuardrailRunner that chains them per-boundary.
   memory/           MemoryBackend protocol, InMemoryBackend, FileMemoryBackend
                     (real on-disk checkpoint/trajectory persistence).
   observability/    Event model, pluggable sinks (in-memory/console/JSONL),
                     and the Tracer every component emits through.
-  evaluation/       Phase 2: the curated 20-task golden suite, EvaluationRunner
-                    (seed control + trajectory persistence), the 5 reliability
-                    metrics, failure analysis reports, and the configuration
-                    comparison tool (guardrail strictness / Critic strategy /
-                    executor retries).
+  evaluation/       The curated 20-task golden suite, EvaluationRunner
+                    (seed control + trajectory persistence), EvaluationHarness
+                    (the convenience wrapper), the 5 reliability metrics,
+                    failure analysis reports, and the configuration
+                    comparison tool.
   exceptions/       The full exception hierarchy (recoverable vs not).
-  _compat/          See "A note on the dependency situation" below.
+  _compat/          See "A note on dependencies" below.
 tests/
-  unit/             Fast, isolated tests per component (151 tests).
+  unit/             Fast, isolated tests per component (156 tests).
   integration/      Full Orchestrator runs against real components,
                     LLM-mocked only (27 tests).
-  eval/             Phase 2 tests: metrics math, the golden suite running
-                    against the real Orchestrator, configuration comparison,
-                    and failure analysis (64 tests).
-examples/           Runnable, narrated example scripts.
-adr/                Architecture Decision Records for the non-obvious calls.
-docs/                Architecture deep-dive + exact roadmap completion status.
+  eval/             Metrics math, the golden suite running against the
+                    real Orchestrator, configuration comparison, and
+                    failure analysis (64 tests).
+examples/           Runnable, narrated example scripts (table above).
+adr/                Architecture Decision Records — real tradeoffs,
+                    alternatives considered, and measured consequences.
+docs/               Architecture deep-dive + exact roadmap completion status.
+scripts/            run_tests.py (offline-friendly test runner),
+                    verify_build.py (builds a real wheel, installs it into
+                    a fresh venv, runs a real Orchestrator loop against it).
 ```
 
-## A note on the dependency situation
+## Development
 
-This project's declared dependency is real **Pydantic v2** (see
-`pyproject.toml`: `pydantic>=2.6,<3.0`). It was developed and tested,
-however, in a sandboxed environment with no package-registry network
-access, where `pip install pydantic` was not possible. Rather than write the
-framework against loosely-typed dicts as a result (which would have
-betrayed the project's "Explicit Contracts" principle), `reliableagent/
-_compat/` ships a small, dependency-free fallback that implements the exact
-slice of the Pydantic v2 API this codebase uses. Every module imports
-`BaseModel`/`Field`/`field_validator`/`ConfigDict` from
-`reliableagent._compat`, which tries real `pydantic` first and only falls
-back to the shim if it's unavailable — so the moment you `pip install`
-this package normally (with network access), it transparently uses real
-Pydantic with zero code changes. See the docstring at the top of
-`src/reliableagent/_compat/_fallback.py` for the full rationale, and run
-`pip install pydantic` yourself, then re-run the test suite, to confirm
-this — it should pass identically either way.
+```bash
+pip install -e ".[dev]"
+python scripts/run_tests.py             # 247 tests
+python scripts/verify_build.py          # build a real wheel + install-test it
+ruff check src tests                    # lint
+mypy                                    # type-check
+pre-commit run --all-files              # everything pre-commit runs in CI
+```
 
-The same situation applies to `pytest`: `scripts/run_tests.py` uses real
+`.github/workflows/ci.yml` runs lint + type-check + the full test suite
+(with coverage) on Python 3.10/3.11/3.12 on every push and PR.
+
+## A note on dependencies
+
+This project's declared dependency is real **Pydantic v2**
+(`pyproject.toml`: `pydantic>=2.6,<3.0`). It was developed in a sandboxed
+environment with no package-registry network access, where
+`pip install pydantic` wasn't possible. Rather than write the framework
+against loosely-typed dicts as a workaround — which would have betrayed
+the project's own "explicit, typed contracts" principle —
+`reliableagent/_compat/` ships a small, dependency-free fallback that
+implements the exact slice of the Pydantic v2 API this codebase uses.
+Every module imports `BaseModel`/`Field`/`field_validator`/
+`model_validator`/`ConfigDict` from `reliableagent._compat`, which tries
+real `pydantic` first and only falls back to the shim if it's
+unavailable — so the moment you `pip install` this package normally, it
+transparently uses real Pydantic with zero code changes. See the
+docstring at the top of `src/reliableagent/_compat/_fallback.py` for the
+full rationale.
+
+The same pattern applies to `pytest`: `scripts/run_tests.py` uses real
 `pytest` if it's importable, and only falls back to a small offline
 runner (`tests/_pytest_shim/`) otherwise. Test files are 100% standard
-pytest syntax (`assert`, `pytest.raises`, plain test functions) and need no
-changes to run under real pytest.
+pytest syntax and need no changes to run under real pytest.
 
-## What's deliberately NOT here yet
+This shim strategy was tested for real: the project owner ran the actual
+CI workflow with real Pydantic installed, and it found one genuine
+behavioral divergence between the shim and real Pydantic — fixed, with
+the full story in [`adr/0010`](adr/0010-real-pydantic-field-validator-default-gap.md).
 
-See [`docs/roadmap_status.md`](docs/roadmap_status.md) for the full,
-itemized comparison against every requirement in the original roadmap,
-including a "Post-Delivery Audit" section covering gaps a self-review
-found after the initial four-phase delivery. Briefly, still not
-implemented: multi-agent coordination and the plugin/distribution
-ecosystem; sandboxing (tools run in plain threads, no process isolation
-or resource limits); distributed tracing/spans (only flat structured
-events exist); selective retrieval in Memory backends (only full
-load-by-ID); and test coverage percentage has never been measured (no
-`coverage` module available offline, same constraint as ruff/mypy/pytest).
-`OutputFilterGuardrail`'s PII detection is regex-based, not an ML
-classifier — documented honestly as a known limitation, not oversold.
+## Honest status: what's here, what isn't
+
+**All 4 roadmap phases are implemented**, tested, and — as of a real CI
+run on real infrastructure — partially verified against real Pydantic,
+real pytest, and real ruff (not just this project's offline tooling).
+[`docs/roadmap_status.md`](docs/roadmap_status.md) is the itemized,
+unhedged comparison against every line of the original project brief,
+including a "Post-Delivery Audit" section for gaps a later self-review
+found, and a section on exactly what that first real CI run caught.
+
+**Not implemented, by design or by honest omission:** multi-agent
+coordination and a plugin/distribution ecosystem; sandboxing (tools run
+in plain threads, no process isolation or resource limits); distributed
+tracing/spans (only flat structured events exist); selective retrieval
+in Memory backends (only full load-by-ID); test coverage has a real
+number now (80.9% as of the first real CI run) but hasn't been acted on
+further. `OutputFilterGuardrail`'s PII detection is regex-based, not an
+ML classifier — stated plainly, not oversold.
+
 The architecture is designed so all of the above can be added as new
-modules without breaking existing contracts — e.g. a new `Guardrail`
-subclass or `Planner` subclass plugs in without touching the
-`Orchestrator`, and a new `ReplanStrategy` plugs into the existing
-`Replanner` without changes to either.
+modules without breaking existing contracts — a new `Guardrail` subclass
+or `Planner` subclass plugs in without touching the `Orchestrator`, and a
+new `ReplanStrategy` plugs into the existing `Replanner` without changes
+to either.
+
+## Changelog
+
+See [`CHANGELOG.md`](CHANGELOG.md) for a chronological record of what
+was added, changed, and fixed at each stage, including every bug found
+along the way and the ADR documenting it.
 
 ## License
 
-MIT
+MIT — see [`LICENSE`](LICENSE).
