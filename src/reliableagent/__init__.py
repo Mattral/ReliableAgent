@@ -58,7 +58,9 @@ from reliableagent.core.models import (
     Trajectory,
 )
 from reliableagent.core.orchestrator import Orchestrator
+from reliableagent.core.reliable_orchestrator import ReliableOrchestrator
 from reliableagent.core.state_machine import StateMachine
+from reliableagent.executor.tool_registry import ToolRegistry
 
 __version__ = "0.1.0"
 
@@ -90,5 +92,7 @@ __all__ = [
     "Trajectory",
     # Orchestration
     "Orchestrator",
+    "ReliableOrchestrator",
     "StateMachine",
+    "ToolRegistry",
 ]

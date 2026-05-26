@@ -35,6 +35,7 @@ edges.
 from __future__ import annotations
 
 import time
+from typing import TYPE_CHECKING
 from datetime import datetime, timezone
 
 from reliableagent.core.enums import (
@@ -76,6 +77,9 @@ from reliableagent.planner.base import Planner
 from reliableagent.planner.critic import Critic
 from reliableagent.planner.replanner import Replanner
 
+if TYPE_CHECKING:
+    from reliableagent.llm.usage import LLMUsageStats
+
 
 class Orchestrator:
     """Drives a `Task` through plan -> execute -> critique -> (replan) -> finish.
@@ -108,6 +112,7 @@ class Orchestrator:
         sink=None,
         checkpoint_every_step: bool = True,
         replanner: Replanner | None = None,
+        usage_tracker: "LLMUsageStats | None" = None,
     ) -> None:
         self._planner = planner
         self._critic = critic
@@ -123,6 +128,43 @@ class Orchestrator:
         # Phase 3's "more sophisticated Replanner" is the default
         # behavior, not an opt-in a caller has to discover and enable.
         self._replanner = replanner or Replanner(planner)
+        self._usage_tracker = usage_tracker
+
+    # ------------------------------------------------------------------
+    # Public read-only introspection properties
+    # ------------------------------------------------------------------
+
+    @property
+    def planner(self):
+        return self._planner
+
+    @property
+    def critic(self):
+        return self._critic
+
+    @property
+    def tools(self):
+        return self._tools
+
+    @property
+    def guardrails(self) -> list:
+        return self._guardrail_runner.guardrails
+
+    @property
+    def memory(self):
+        return self._memory
+
+    @property
+    def executor(self):
+        return self._executor
+
+    @property
+    def replanner(self):
+        return self._replanner
+
+    @property
+    def sink(self):
+        return self._sink
 
     # ------------------------------------------------------------------
     # Public API
@@ -135,6 +177,7 @@ class Orchestrator:
         state_machine = StateMachine()
         tracer.emit_run_started(task.task_id, task.description)
 
+        usage_before = self._usage_tracker.snapshot() if self._usage_tracker else None
         start_time = time.monotonic()
         try:
             self._run_loop(task, trajectory, tracer, state_machine)
@@ -145,7 +188,7 @@ class Orchestrator:
                 trajectory, state_machine, tracer, FailureCategory.UNKNOWN, f"Unexpected error: {exc}"
             )
 
-        return self._finalize(task, trajectory, tracer, state_machine, start_time)
+        return self._finalize(task, trajectory, tracer, state_machine, start_time, usage_before)
 
     def resume(self, run_id: str) -> RunResult:
         """Resume a previously checkpointed run from its latest checkpoint.
@@ -169,6 +212,7 @@ class Orchestrator:
         state_machine = StateMachine(initial_state=OrchestratorState.PLANNING)
         state_machine.transition(OrchestratorState.EXECUTING)
 
+        usage_before_r = self._usage_tracker.snapshot() if self._usage_tracker else None
         start_time = time.monotonic()
         try:
             if checkpoint.current_plan is None:
@@ -194,7 +238,7 @@ class Orchestrator:
                 trajectory, state_machine, tracer, FailureCategory.UNKNOWN, f"Unexpected error: {exc}"
             )
 
-        return self._finalize(checkpoint.task, trajectory, tracer, state_machine, start_time)
+        return self._finalize(checkpoint.task, trajectory, tracer, state_machine, start_time, usage_before_r)
 
     def shutdown(self) -> None:
         """Release underlying resources (the Executor's thread pool)."""
@@ -211,6 +255,7 @@ class Orchestrator:
         tracer: Tracer,
         state_machine: StateMachine,
         start_time: float,
+        usage_before: "LLMUsageStats | None" = None,
     ) -> RunResult:
         duration = time.monotonic() - start_time
         trajectory.completed_at = datetime.now(timezone.utc)
@@ -219,6 +264,15 @@ class Orchestrator:
         tracer.emit_run_completed(state_machine.state.value, succeeded)
         self._memory.save_trajectory(trajectory)
 
+        input_tokens = output_tokens = llm_calls = 0
+        llm_latency = 0.0
+        if self._usage_tracker is not None and usage_before is not None:
+            after = self._usage_tracker.snapshot()
+            input_tokens = after.total_input_tokens - usage_before.total_input_tokens
+            output_tokens = after.total_output_tokens - usage_before.total_output_tokens
+            llm_calls = after.total_calls - usage_before.total_calls
+            llm_latency = after.total_latency_seconds - usage_before.total_latency_seconds
+
         metrics = RunMetrics(
             total_steps=len(trajectory.step_records),
             total_tool_calls=trajectory.total_tool_calls,
@@ -226,6 +280,10 @@ class Orchestrator:
             total_guardrail_blocks=trajectory.total_guardrail_blocks,
             succeeded=succeeded,
             duration_seconds=duration,
+            total_input_tokens=input_tokens,
+            total_output_tokens=output_tokens,
+            total_llm_calls=llm_calls,
+            total_llm_latency_seconds=llm_latency,
         )
         return RunResult(
             run_id=trajectory.run_id,

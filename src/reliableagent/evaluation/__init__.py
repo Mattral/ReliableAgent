@@ -49,6 +49,7 @@ from reliableagent.evaluation.golden_task import (
 )
 from reliableagent.evaluation.golden_tasks import ALL_GOLDEN_TASKS, get_plan_script
 from reliableagent.evaluation.golden_tools import build_golden_task_tools
+from reliableagent.evaluation.harness import EvaluationHarness, EvaluationResults, get_task_set, register_task_set
 from reliableagent.evaluation.metrics import (
     GradedRun,
     MetricsReport,
@@ -63,6 +64,8 @@ __all__ = [
     "ComparisonResult",
     "ConfigVariant",
     "EvalConfig",
+    "EvaluationHarness",
+    "EvaluationResults",
     "EvaluationRunner",
     "FailureAnalysisReport",
     "FailureDetail",
@@ -81,9 +84,11 @@ __all__ = [
     "exact_match_grader",
     "executor_retry_variants",
     "get_plan_script",
+    "get_task_set",
     "group_by_golden_task",
     "guardrail_strictness_variants",
     "numeric_tolerance_grader",
+    "register_task_set",
     "run_golden_suite",
     "task_pass_rate",
 ]

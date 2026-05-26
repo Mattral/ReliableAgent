@@ -89,15 +89,21 @@ class Executor:
                 output = self._run_with_timeout(
                     spec.func, validated_args, call.timeout_seconds, spec.is_async
                 )
-                result = ToolResult(
-                    call_id=call.call_id,
-                    success=True,
-                    output=output,
-                    duration_seconds=time.monotonic() - start,
-                    validated=True,
+                if self._registry.validate_result(call.tool_name, output):
+                    result = ToolResult(
+                        call_id=call.call_id,
+                        success=True,
+                        output=output,
+                        duration_seconds=time.monotonic() - start,
+                        validated=True,
+                    )
+                    self._tracer.emit_tool_call_completed(call, result)
+                    return result
+                last_error = (
+                    f"Tool '{call.tool_name}' returned a result that failed its "
+                    f"registered output validator: {output!r} "
+                    f"(attempt {attempt}/{self._max_retries + 1})."
                 )
-                self._tracer.emit_tool_call_completed(call, result)
-                return result
             except concurrent.futures.TimeoutError:
                 last_error = (
                     f"Tool '{call.tool_name}' timed out after {call.timeout_seconds}s "

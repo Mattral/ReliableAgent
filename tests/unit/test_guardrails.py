@@ -75,3 +75,16 @@ def test_guardrail_runner_skips_inapplicable_guardrails():
     result = runner.run(GuardrailBoundary.FINAL_OUTPUT, "anything")
     assert result.allowed is True
     assert result.decisions == []
+
+
+def test_guardrail_runner_guardrails_property_reflects_configured_list():
+    g1 = BasicGuardrail()
+    g2 = ToolArgumentSanityGuardrail()
+    runner = GuardrailRunner([g1, g2])
+    assert runner.guardrails == [g1, g2]
+
+def test_guardrail_runner_guardrails_property_returns_copy():
+    runner = GuardrailRunner([BasicGuardrail()])
+    snapshot = runner.guardrails
+    snapshot.append(ToolArgumentSanityGuardrail())
+    assert len(runner.guardrails) == 1

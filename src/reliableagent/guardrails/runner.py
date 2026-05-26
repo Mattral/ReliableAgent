@@ -39,6 +39,11 @@ class GuardrailRunner:
     def __init__(self, guardrails: list[Guardrail] | None = None) -> None:
         self._guardrails = guardrails or []
 
+    @property
+    def guardrails(self) -> list:
+        """Defensive copy of configured guardrails."""
+        return list(self._guardrails)
+
     def add(self, guardrail: Guardrail) -> None:
         """Register an additional guardrail at runtime."""
         self._guardrails.append(guardrail)

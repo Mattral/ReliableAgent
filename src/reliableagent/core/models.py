@@ -456,6 +456,14 @@ class RunMetrics(_BaseFrozenModel):
     total_guardrail_blocks: int = Field(..., ge=0)
     succeeded: bool
     duration_seconds: float = Field(..., ge=0.0)
+    total_input_tokens: int = Field(default=0, ge=0)
+    total_output_tokens: int = Field(default=0, ge=0)
+    total_llm_calls: int = Field(default=0, ge=0)
+    total_llm_latency_seconds: float = Field(default=0.0, ge=0.0)
+
+    @property
+    def total_tokens(self) -> int:
+        return self.total_input_tokens + self.total_output_tokens
 
 
 class RunResult(_BaseFrozenModel):

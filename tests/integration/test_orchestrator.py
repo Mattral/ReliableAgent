@@ -222,3 +222,25 @@ def test_orchestrator_emits_observability_events():
         assert "state_transition" in event_types
     finally:
         orchestrator.shutdown()
+
+
+def test_orchestrator_exposes_public_introspection_properties():
+    """Regression test: Orchestrator exposes configured components via clean,
+    public, read-only properties rather than requiring callers to reach into
+    private attributes (added while building ReliableOrchestrator/EvaluationHarness)."""
+    registry = _registry_with_add_and_boom()
+    planner = LLMPlanner(make_mock_llm())
+    critic = ThresholdCritic()
+    guardrails = [BasicGuardrail()]
+    orchestrator = Orchestrator(planner=planner, critic=critic, tools=registry, guardrails=guardrails)
+    try:
+        assert orchestrator.planner is planner
+        assert orchestrator.critic is critic
+        assert orchestrator.tools is registry
+        assert orchestrator.guardrails == guardrails
+        assert orchestrator.memory is not None
+        assert orchestrator.executor is not None
+        assert orchestrator.replanner is not None
+        assert orchestrator.sink is not None
+    finally:
+        orchestrator.shutdown()
