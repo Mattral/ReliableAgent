@@ -14,7 +14,11 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 def run(cmd):
     print(f"$ {' '.join(cmd)}")
-    r = subprocess.run(cmd, capture_output=True, text=True)
+    # Every call site in this script passes a list built from
+    # sys.executable / an absolute venv interpreter path plus fixed
+    # literal arguments -- no shell=True, no string interpolation, no
+    # untrusted input. This is standard build-tooling subprocess usage.
+    r = subprocess.run(cmd, capture_output=True, text=True)  # noqa: S603
     if r.stdout: print(r.stdout)
     return r
 
@@ -59,8 +63,14 @@ def main() -> int:
             "orch.shutdown(); print('INSTALLED PACKAGE WORKS')"
         )
         env_pp = ":".join(p for p in sys.path if p)
-        r2 = subprocess.run([py, "-c", check], capture_output=True, text=True,
-                            env={**os.environ, "PYTHONPATH": env_pp})
+        # `py` is an absolute path to the fresh venv's own interpreter
+        # (constructed from a tempfile.TemporaryDirectory, not user
+        # input), and `check` is a fixed literal string built entirely
+        # within this script -- no shell=True, nothing untrusted.
+        r2 = subprocess.run(  # noqa: S603
+            [py, "-c", check], capture_output=True, text=True,
+            env={**os.environ, "PYTHONPATH": env_pp},
+        )
         print(r2.stdout)
         if r2.returncode != 0 or "INSTALLED PACKAGE WORKS" not in r2.stdout:
             print(r2.stderr, file=sys.stderr); return 1

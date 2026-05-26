@@ -35,7 +35,11 @@ def _try_real_pytest(argv: list[str]) -> int | None:
     if importlib.util.find_spec("pytest") is None:
         return None
     cmd = [sys.executable, "-m", "pytest", *argv]
-    return subprocess.call(cmd, cwd=str(REPO_ROOT))
+    # sys.executable is a trusted absolute path (not a bare command name
+    # bandit's S607 warns about), and *argv is this script's own CLI
+    # passthrough -- the same trust boundary as invoking this script at
+    # all. No shell=True, no string interpolation.
+    return subprocess.call(cmd, cwd=str(REPO_ROOT))  # noqa: S603
 
 
 def _install_shim() -> None:

@@ -165,6 +165,19 @@ def field_validator(  # noqa: N802
 
     so `func` received here may already be a `classmethod` object (when
     `@classmethod` was applied first/innermost) or a plain function.
+
+    IMPORTANT DIVERGENCE FROM REAL PYDANTIC (see adr/0010): this shim's
+    constructor runs every field_validator unconditionally, including on
+    fields that fall back to their declared default rather than being
+    explicitly supplied by the caller. Real Pydantic v2's default
+    behavior is the opposite: a `field_validator` is skipped entirely
+    for a defaulted field unless that field's `Field(...)` sets
+    `validate_default=True`. This divergence is real and was the direct
+    cause of a genuine bug (`adr/0010`) -- for any validator whose logic
+    depends on ANOTHER field's value (via `info.data`), use
+    `model_validator(mode="after")` below instead, which this shim
+    implements to match real Pydantic's "always runs after full
+    construction, defaults included" semantics exactly, with no such gap.
     """
 
     field_names = (field_name, *_more_fields)
@@ -174,6 +187,39 @@ def field_validator(  # noqa: N802
         wrapped = classmethod(plain_func)
         wrapped.__validator_fields__ = field_names  # type: ignore[attr-defined]
         return wrapped
+
+    return decorator
+
+
+def model_validator(*, mode: str = "after") -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    """Stand-in for pydantic.model_validator (only supports mode="after").
+
+    Mirrors real Pydantic v2 usage::
+
+        @model_validator(mode="after")
+        def _check(self) -> "Self":
+            if self.a and not self.b:
+                raise ValueError("b is required when a is set.")
+            return self
+
+    Unlike `field_validator`, a model_validator in "after" mode always
+    runs once the FULL model (every field, defaults included) has been
+    constructed -- exactly matching real Pydantic v2's behavior, with no
+    validate-default gap. This is the correct tool for any validation
+    that depends on more than one field's value; see `adr/0010` for the
+    concrete bug this shim previously lacked the tooling to prevent.
+    """
+    if mode != "after":
+        raise NotImplementedError(
+            "This compat shim's model_validator only supports mode='after' "
+            "(the offline fallback used when real pydantic isn't installed; "
+            "real pydantic's mode='before'/'wrap' are not implemented here "
+            "since nothing in this codebase currently needs them)."
+        )
+
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+        func.__is_model_validator__ = True  # type: ignore[attr-defined]
+        return func
 
     return decorator
 
@@ -331,6 +377,17 @@ class BaseModel:
             object.__setattr__(self, name, value)
 
         self.__dict__["_initialized"] = True
+
+        # Run model_validators ("after"-style): unlike field_validators
+        # above, these always run once every field (defaults included)
+        # is set -- see model_validator()'s docstring and adr/0010 for
+        # why this distinction matters and what bug it fixes.
+        for attr_name in dir(cls):
+            if attr_name.startswith("__"):
+                continue
+            attr = cls.__dict__.get(attr_name)
+            if attr is not None and getattr(attr, "__is_model_validator__", False):
+                attr(self)
 
         if cls.model_config.get("frozen", False):
             pass  # enforced in __setattr__ below

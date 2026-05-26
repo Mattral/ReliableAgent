@@ -29,7 +29,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from reliableagent._compat import BaseModel, ConfigDict, Field, field_validator
+from reliableagent._compat import BaseModel, ConfigDict, Field, field_validator, model_validator
 from reliableagent.core.enums import (
     FailureCategory,
     GuardrailBoundary,
@@ -123,15 +123,30 @@ class PlanStep(_BaseFrozenModel):
         default=None, description="Why the Planner believes this step is necessary."
     )
 
-    @field_validator("tool_name")
-    @classmethod
-    def _tool_name_required_for_tool_calls(
-        cls, v: str | None, info: Any
-    ) -> str | None:
-        step_type = info.data.get("step_type")
-        if step_type == StepType.TOOL_CALL and not v:
+    @model_validator(mode="after")
+    def _tool_name_required_for_tool_calls(self) -> "PlanStep":
+        """`tool_name` is required when `step_type == TOOL_CALL`.
+
+        This was previously a `@field_validator("tool_name")` reading
+        `step_type` via `info.data` -- which is a real bug (see
+        `adr/0010`): real Pydantic v2 does NOT run a `field_validator`
+        on a field that falls back to its declared default rather than
+        being explicitly supplied by the caller (unless
+        `validate_default=True` is set), so `PlanStep(step_type=
+        StepType.TOOL_CALL, description="...")` with `tool_name` simply
+        omitted silently skipped this check entirely under real
+        Pydantic, while appearing to work correctly under this
+        project's offline compat shim (whose constructor validates
+        every resolved field unconditionally, defaults included -- a
+        genuine, now-documented divergence). `model_validator(mode=
+        "after")` always runs once the full model, defaults included,
+        is constructed, which is the textbook-correct tool for any
+        cross-field invariant like this one, in both real Pydantic and
+        this shim.
+        """
+        if self.step_type == StepType.TOOL_CALL and not self.tool_name:
             raise ValueError("tool_name is required when step_type is TOOL_CALL.")
-        return v
+        return self
 
 
 class Plan(_BaseFrozenModel):

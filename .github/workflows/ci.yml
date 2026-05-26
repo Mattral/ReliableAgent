@@ -6,11 +6,13 @@ name: CI
 # .pre-commit-config.yaml runs locally, so "passes pre-commit"
 # and "passes CI" are the same bar.
 #
-# NOTE: as documented prominently in docs/roadmap_status.md, this
-# workflow has never actually executed in this delivery's sandboxed
-# development environment (no GitHub Actions runner, no network access
-# to install ruff/mypy/pytest). It is believed correct based on careful
-# manual review but is explicitly flagged as unverified.
+# NOTE: this workflow was never executed during this project's sandboxed
+# development (no GitHub Actions runner, no network access to install
+# ruff/mypy/pytest there). It HAS since been run by the project owner on
+# real GitHub Actions infrastructure with real pydantic/pytest/ruff/mypy
+# installed -- see docs/roadmap_status.md's "Post-Delivery Audit" section
+# for what that first real run found (one real Pydantic-vs-shim bug,
+# fixed in adr/0010) and what's still being addressed (ruff findings).
 
 on:
   push:
@@ -39,6 +41,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
     steps:

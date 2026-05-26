@@ -8,14 +8,14 @@ environments where `pip install pydantic` is not possible — see
 `reliableagent._compat._fallback` for the full rationale.
 
 Every other module in the codebase should import `BaseModel`,
-`ConfigDict`, `Field`, and `field_validator` from
+`ConfigDict`, `Field`, `field_validator`, and `model_validator` from
 `reliableagent._compat`, never from `pydantic` directly.
 """
 
 from __future__ import annotations
 
 try:
-    from pydantic import BaseModel, ConfigDict, Field, field_validator
+    from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
     PYDANTIC_AVAILABLE = True
 except ImportError:  # pragma: no cover - exercised only without pydantic installed
@@ -24,8 +24,16 @@ except ImportError:  # pragma: no cover - exercised only without pydantic instal
         ConfigDict,
         Field,
         field_validator,
+        model_validator,
     )
 
     PYDANTIC_AVAILABLE = False
 
-__all__ = ["BaseModel", "ConfigDict", "Field", "PYDANTIC_AVAILABLE", "field_validator"]
+__all__ = [
+    "BaseModel",
+    "ConfigDict",
+    "Field",
+    "PYDANTIC_AVAILABLE",
+    "field_validator",
+    "model_validator",
+]

@@ -28,7 +28,39 @@ def my_search_tool(query: str) -> str:
     return f"(simulated) search results for: {query}"
 
 def my_calculator_tool(expression: str) -> float:
-    return eval(expression, {"__builtins__": {}})  # noqa: S307 - toy example
+    """A toy calculator tool standing in for a real one.
+
+    Deliberately does NOT use eval() (even in a sandboxed globals dict):
+    a portfolio example is exactly the wrong place to demonstrate that
+    pattern, since it's easy to copy without noticing the safety
+    implications. This uses Python's own `ast` module to parse the
+    expression into a syntax tree and evaluates ONLY the small set of
+    arithmetic node types explicitly allowed below -- anything else
+    (attribute access, function calls, subscripts, etc.) raises.
+    """
+    import ast
+    import operator
+
+    allowed_operators = {
+        ast.Add: operator.add,
+        ast.Sub: operator.sub,
+        ast.Mult: operator.mul,
+        ast.Div: operator.truediv,
+        ast.Pow: operator.pow,
+        ast.USub: operator.neg,
+    }
+
+    def _eval_node(node: ast.AST) -> float:
+        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+            return node.value
+        if isinstance(node, ast.BinOp) and type(node.op) in allowed_operators:
+            return allowed_operators[type(node.op)](_eval_node(node.left), _eval_node(node.right))
+        if isinstance(node, ast.UnaryOp) and type(node.op) in allowed_operators:
+            return allowed_operators[type(node.op)](_eval_node(node.operand))
+        raise ValueError(f"Unsupported expression element: {ast.dump(node)}")
+
+    parsed = ast.parse(expression, mode="eval")
+    return _eval_node(parsed.body)
 
 
 def main() -> None:
