@@ -1,7 +1,9 @@
 """Unit tests for tool output validation (result_validator on ToolSpec/ToolRegistry/Executor)."""
+
 from __future__ import annotations
+
 from reliableagent.core.models import ToolCall
-from reliableagent.executor import ToolRegistry, Executor
+from reliableagent.executor import Executor, ToolRegistry
 
 
 def test_no_validator_trusts_any_output():

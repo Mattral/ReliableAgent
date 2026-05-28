@@ -81,7 +81,9 @@ def test_threshold_critic_does_not_replan_with_no_results():
     task = make_task()
     from reliableagent.core.models import Plan, PlanStep
 
-    plan = Plan(task_id=task.task_id, steps=[PlanStep(step_type=StepType.REASONING, description="x")])
+    plan = Plan(
+        task_id=task.task_id, steps=[PlanStep(step_type=StepType.REASONING, description="x")]
+    )
     feedback = critic.critique(task, plan, [])
     assert feedback.should_replan is False
     assert feedback.quality_score == 1.0
@@ -92,7 +94,9 @@ def test_threshold_critic_replans_above_threshold():
     task = make_task()
     from reliableagent.core.models import Plan, PlanStep
 
-    plan = Plan(task_id=task.task_id, steps=[PlanStep(step_type=StepType.REASONING, description="x")])
+    plan = Plan(
+        task_id=task.task_id, steps=[PlanStep(step_type=StepType.REASONING, description="x")]
+    )
     results = [
         ToolResult(call_id="c1", success=False, error="failed"),
         ToolResult(call_id="c2", success=False, error="failed again"),
@@ -108,7 +112,9 @@ def test_threshold_critic_does_not_replan_below_threshold():
     task = make_task()
     from reliableagent.core.models import Plan, PlanStep
 
-    plan = Plan(task_id=task.task_id, steps=[PlanStep(step_type=StepType.REASONING, description="x")])
+    plan = Plan(
+        task_id=task.task_id, steps=[PlanStep(step_type=StepType.REASONING, description="x")]
+    )
     results = [
         ToolResult(call_id="c1", success=True, output="ok"),
         ToolResult(call_id="c2", success=False, error="one failure"),
@@ -121,8 +127,12 @@ def test_llm_critic_parses_feedback_correctly():
     from reliableagent.core.models import Plan, PlanStep
 
     task = make_task()
-    plan = Plan(task_id=task.task_id, steps=[PlanStep(step_type=StepType.REASONING, description="x")])
-    response = critic_json(quality_score=0.4, should_replan=True, issues=["bad tool result"], rationale="needs fix")
+    plan = Plan(
+        task_id=task.task_id, steps=[PlanStep(step_type=StepType.REASONING, description="x")]
+    )
+    response = critic_json(
+        quality_score=0.4, should_replan=True, issues=["bad tool result"], rationale="needs fix"
+    )
     critic = LLMCritic(make_mock_llm(response))
     feedback = critic.critique(task, plan, [])
     assert feedback.quality_score == 0.4

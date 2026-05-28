@@ -71,7 +71,9 @@ def _make_run_result(
 def test_task_success_rate_basic_fraction():
     runs = [
         GradedRun("t1", "cat_a", 0, _make_run_result(), True, "ok"),
-        GradedRun("t2", "cat_a", 0, _make_run_result(final_state=OrchestratorState.FAILED), False, "fail"),
+        GradedRun(
+            "t2", "cat_a", 0, _make_run_result(final_state=OrchestratorState.FAILED), False, "fail"
+        ),
         GradedRun("t3", "cat_a", 0, _make_run_result(), True, "ok"),
         GradedRun("t4", "cat_a", 0, _make_run_result(), True, "ok"),
     ]
@@ -121,12 +123,17 @@ def test_failure_category_distribution_only_counts_failed_runs():
     runs = [
         GradedRun(
             "t1", "cat_a", 0,
-            _make_run_result(failure_category=FailureCategory.TOOL_ERROR, final_state=OrchestratorState.FAILED),
+            _make_run_result(
+                failure_category=FailureCategory.TOOL_ERROR, final_state=OrchestratorState.FAILED
+            ),
             False, "fail",
         ),
         GradedRun(
             "t2", "cat_a", 0,
-            _make_run_result(failure_category=FailureCategory.GUARDRAIL_BLOCKED, final_state=OrchestratorState.FAILED),
+            _make_run_result(
+                failure_category=FailureCategory.GUARDRAIL_BLOCKED,
+                final_state=OrchestratorState.FAILED,
+            ),
             False, "fail",
         ),
         GradedRun("t3", "cat_a", 0, _make_run_result(), True, "ok"),
@@ -139,7 +146,11 @@ def test_by_category_breakdown_is_isolated_per_category():
     runs = [
         GradedRun("t1", "arithmetic", 0, _make_run_result(), True, "ok"),
         GradedRun("t2", "arithmetic", 0, _make_run_result(), True, "ok"),
-        GradedRun("t3", "guardrail", 0, _make_run_result(final_state=OrchestratorState.FAILED), False, "fail"),
+        GradedRun(
+            "t3", "guardrail", 0,
+            _make_run_result(final_state=OrchestratorState.FAILED),
+            False, "fail",
+        ),
     ]
     report = compute_metrics(runs)
     assert report.by_category["arithmetic"].task_success_rate == 1.0
@@ -167,7 +178,9 @@ def test_group_by_golden_task():
 def test_task_pass_rate_across_seeds():
     runs = [
         GradedRun("t1", "cat_a", 0, _make_run_result(), True, "ok"),
-        GradedRun("t1", "cat_a", 1, _make_run_result(final_state=OrchestratorState.FAILED), False, "fail"),
+        GradedRun(
+            "t1", "cat_a", 1, _make_run_result(final_state=OrchestratorState.FAILED), False, "fail"
+        ),
         GradedRun("t1", "cat_a", 2, _make_run_result(), True, "ok"),
     ]
     assert task_pass_rate(runs, "t1") == (2 / 3)

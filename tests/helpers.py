@@ -48,7 +48,11 @@ def plan_json(
 
 
 def critic_json(
-    *, quality_score: float, should_replan: bool, issues: list[str] | None = None, rationale: str = ""
+    *,
+    quality_score: float,
+    should_replan: bool,
+    issues: list[str] | None = None,
+    rationale: str = "",
 ) -> str:
     """Build a JSON string in the exact shape `LLMCritic` expects to parse."""
     return json.dumps(

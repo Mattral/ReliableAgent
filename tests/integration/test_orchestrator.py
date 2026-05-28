@@ -232,7 +232,9 @@ def test_orchestrator_exposes_public_introspection_properties():
     planner = LLMPlanner(make_mock_llm())
     critic = ThresholdCritic()
     guardrails = [BasicGuardrail()]
-    orchestrator = Orchestrator(planner=planner, critic=critic, tools=registry, guardrails=guardrails)
+    orchestrator = Orchestrator(
+        planner=planner, critic=critic, tools=registry, guardrails=guardrails
+    )
     try:
         assert orchestrator.planner is planner
         assert orchestrator.critic is critic

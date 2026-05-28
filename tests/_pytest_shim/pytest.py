@@ -41,12 +41,15 @@ class _RaisesContext:
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> bool:
         if exc_type is None:
-            raise AssertionError(f"Expected {self.expected_type.__name__} but no exception was raised.")
+            raise AssertionError(
+                f"Expected {self.expected_type.__name__} but no exception was raised."
+            )
         if not issubclass(exc_type, self.expected_type):
             return False  # let the real (unexpected) exception propagate
         if self.match is not None and self.match not in str(exc_val):
             raise AssertionError(
-                f"Exception message {str(exc_val)!r} did not contain expected substring {self.match!r}."
+                f"Exception message {str(exc_val)!r} did not contain "
+                f"expected substring {self.match!r}."
             )
         self.raised = exc_val
         return True  # suppress the expected exception

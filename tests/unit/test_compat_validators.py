@@ -15,7 +15,9 @@ is that this exact test passes under BOTH, whereas the bug this fixes
 was invisible under the shim and only visible under real Pydantic.
 """
 from __future__ import annotations
+
 import pytest
+
 from reliableagent.core.enums import StepType
 from reliableagent.core.models import PlanStep
 
