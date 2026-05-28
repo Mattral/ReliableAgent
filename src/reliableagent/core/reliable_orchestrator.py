@@ -7,6 +7,7 @@ NOTE: `model=` is interpreted as an Anthropic model name (not HuggingFace).
 Pass `llm_client=` directly to supply any LLMClient without needing a model name.
 """
 from __future__ import annotations
+
 from reliableagent.core.models import RunResult, Task
 from reliableagent.core.orchestrator import Orchestrator
 from reliableagent.executor.tool_registry import ToolRegistry
@@ -18,7 +19,9 @@ from reliableagent.planner.llm_planner import LLMPlanner
 
 
 class ReliableOrchestrator:
-    """Convenience wrapper: matches the roadmap's `ReliableOrchestrator(model=..., tools=..., ...)` DX."""
+    """Convenience wrapper: matches the roadmap's
+    `ReliableOrchestrator(model=..., tools=..., ...)` DX.
+    """
 
     def __init__(self, *, tools: ToolRegistry, guardrails=None, model=None,
                  llm_client=None, critic=None,
@@ -43,7 +46,11 @@ class ReliableOrchestrator:
         )
 
     def run(self, task, *, max_steps: int = 20, max_replans: int = 3) -> RunResult:
-        resolved = task if isinstance(task, Task) else Task(description=task, max_steps=max_steps, max_replans=max_replans)
+        resolved = (
+            task
+            if isinstance(task, Task)
+            else Task(description=task, max_steps=max_steps, max_replans=max_replans)
+        )
         return self._orchestrator.run(resolved)
 
     def resume(self, run_id: str) -> RunResult:

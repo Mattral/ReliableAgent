@@ -185,7 +185,11 @@ class Orchestrator:
             self._fail(trajectory, state_machine, tracer, self._categorize(exc), exc.message)
         except Exception as exc:  # noqa: BLE001 - last-resort safety net
             self._fail(
-                trajectory, state_machine, tracer, FailureCategory.UNKNOWN, f"Unexpected error: {exc}"
+                trajectory,
+                state_machine,
+                tracer,
+                FailureCategory.UNKNOWN,
+                f"Unexpected error: {exc}",
             )
 
         return self._finalize(task, trajectory, tracer, state_machine, start_time, usage_before)
@@ -235,10 +239,16 @@ class Orchestrator:
             self._fail(trajectory, state_machine, tracer, self._categorize(exc), exc.message)
         except Exception as exc:  # noqa: BLE001
             self._fail(
-                trajectory, state_machine, tracer, FailureCategory.UNKNOWN, f"Unexpected error: {exc}"
+                trajectory,
+                state_machine,
+                tracer,
+                FailureCategory.UNKNOWN,
+                f"Unexpected error: {exc}",
             )
 
-        return self._finalize(checkpoint.task, trajectory, tracer, state_machine, start_time, usage_before_r)
+        return self._finalize(
+            checkpoint.task, trajectory, tracer, state_machine, start_time, usage_before_r
+        )
 
     def shutdown(self) -> None:
         """Release underlying resources (the Executor's thread pool)."""
@@ -363,7 +373,9 @@ class Orchestrator:
 
                 if step.step_type == StepType.FINAL_ANSWER:
                     final_text = step.description
-                    final_text = self._guard(GuardrailBoundary.FINAL_OUTPUT, final_text, trajectory, tracer)
+                    final_text = self._guard(
+                        GuardrailBoundary.FINAL_OUTPUT, final_text, trajectory, tracer
+                    )
                     trajectory.final_answer = final_text
                     # Record a final critique purely for observability/
                     # trajectory completeness, even on this success path --
@@ -393,7 +405,9 @@ class Orchestrator:
 
             if not feedback.should_replan:
                 final_text = self._derive_fallback_answer(results)
-                final_text = self._guard(GuardrailBoundary.FINAL_OUTPUT, final_text, trajectory, tracer)
+                final_text = self._guard(
+                    GuardrailBoundary.FINAL_OUTPUT, final_text, trajectory, tracer
+                )
                 trajectory.final_answer = final_text
                 self._transition(state_machine, tracer, OrchestratorState.COMPLETED)
                 self._checkpoint(
