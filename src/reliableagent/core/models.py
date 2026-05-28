@@ -257,7 +257,9 @@ class CriterionScores(_BaseFrozenModel):
     inputs it's computed from.
     """
 
-    correctness: float = Field(..., ge=0.0, le=1.0, description="Did this achieve what it should have?")
+    correctness: float = Field(
+        ..., ge=0.0, le=1.0, description="Did this achieve what it should have?"
+    )
     efficiency: float = Field(
         ..., ge=0.0, le=1.0, description="Was it accomplished without excess steps/waste?"
     )
@@ -266,7 +268,11 @@ class CriterionScores(_BaseFrozenModel):
     )
 
     def weighted_overall(
-        self, *, correctness_weight: float = 0.6, efficiency_weight: float = 0.2, safety_weight: float = 0.2
+        self,
+        *,
+        correctness_weight: float = 0.6,
+        efficiency_weight: float = 0.2,
+        safety_weight: float = 0.2,
     ) -> float:
         """Combine the three criteria into a single score, correctness-weighted by default.
 
@@ -327,7 +333,8 @@ class Feedback(_BaseFrozenModel):
         default=None, description="Multi-criteria breakdown, when the Critic strategy supports it."
     )
     step_critiques: list[StepCritique] = Field(
-        default_factory=list, description="Per-step verdicts, for Critics doing process supervision."
+        default_factory=list,
+        description="Per-step verdicts, for Critics doing process supervision.",
     )
     created_at: datetime = Field(default_factory=_utcnow)
 
@@ -373,7 +380,8 @@ class StepRecord(_BaseFrozenModel):
     tool_result: ToolResult | None = None
     guardrail_decisions: list[GuardrailDecision] = Field(default_factory=list)
     step_critique: StepCritique | None = Field(
-        default=None, description="The Critic's per-step verdict, when process supervision is enabled."
+        default=None,
+        description="The Critic's per-step verdict, when process supervision is enabled.",
     )
     started_at: datetime = Field(default_factory=_utcnow)
     completed_at: datetime | None = None

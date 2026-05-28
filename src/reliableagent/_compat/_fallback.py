@@ -460,7 +460,9 @@ def _collect_field_infos(namespace: dict[str, Any]) -> dict[str, FieldInfo]:
     return {k: v for k, v in namespace.items() if isinstance(v, FieldInfo)}
 
 
-def _collect_plain_defaults(namespace: dict[str, Any], annotations: dict[str, Any]) -> dict[str, Any]:
+def _collect_plain_defaults(
+    namespace: dict[str, Any], annotations: dict[str, Any]
+) -> dict[str, Any]:
     """Capture simple `name: Type = value` class-level defaults (non-Field, non-method)."""
     plain: dict[str, Any] = {}
     for key in annotations:
@@ -478,7 +480,9 @@ class _BaseModelMeta(type):
     mistaken for real default values by `get_type_hints`/instance access,
     mirroring Pydantic's collection of FieldInfo at class-definition time."""
 
-    def __new__(mcs, name: str, bases: tuple[type, ...], namespace: dict[str, Any], **kwargs: Any) -> type:
+    def __new__(
+        mcs, name: str, bases: tuple[type, ...], namespace: dict[str, Any], **kwargs: Any
+    ) -> type:
         field_infos = _collect_field_infos(namespace)
         merged_infos: dict[str, FieldInfo] = {}
         for base in bases:
