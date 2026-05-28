@@ -135,7 +135,11 @@ class FileMemoryBackend:
 
     def load_checkpoint(self, run_id: str, checkpoint_id: str) -> Checkpoint:
         checkpoints_dir = self._root / run_id / "checkpoints"
-        matches = list(checkpoints_dir.glob(f"*_{checkpoint_id}.json")) if checkpoints_dir.exists() else []
+        matches = (
+            list(checkpoints_dir.glob(f"*_{checkpoint_id}.json"))
+            if checkpoints_dir.exists()
+            else []
+        )
         if not matches:
             raise CheckpointNotFoundError(
                 f"No checkpoint '{checkpoint_id}' found for run '{run_id}'.",

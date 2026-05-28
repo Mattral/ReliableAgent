@@ -55,7 +55,9 @@ class AnthropicLLMClient(BaseLLMClient):
                 without needing the real package installed.
         """
         super().__init__(model_name=model)
-        self._client = client if client is not None else self._build_sdk_client(api_key, max_retries)
+        self._client = (
+            client if client is not None else self._build_sdk_client(api_key, max_retries)
+        )
 
     @staticmethod
     def _build_sdk_client(api_key: str | None, max_retries: int) -> Any:

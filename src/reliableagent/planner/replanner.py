@@ -147,7 +147,9 @@ class RetryDifferentApproachStrategy(ReplanStrategy):
     def build_hint(self, context: ReplanContext) -> str:
         failed_results = [r for r in context.prior_results if not r.success]
         failed_errors = [r.error for r in failed_results if r.error]
-        error_summary = "; ".join(failed_errors[:3]) if failed_errors else context.feedback.rationale
+        error_summary = (
+            "; ".join(failed_errors[:3]) if failed_errors else context.feedback.rationale
+        )
         return (
             f"The previous approach failed ({len(failed_results)} failed call(s)): "
             f"{error_summary}. Do not repeat the exact same tool call with the same "

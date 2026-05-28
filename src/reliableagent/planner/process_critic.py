@@ -129,7 +129,9 @@ class DeterministicProcessCritic(Critic):
         # that looks like a safety-relevant failure (vs. an ordinary
         # operational one). This is intentionally conservative: it can
         # only ever flag a concern it actually has evidence for.
-        safety_relevant_failures = [r for r in failures if r.error and _looks_safety_relevant(r.error)]
+        safety_relevant_failures = [
+            r for r in failures if r.error and _looks_safety_relevant(r.error)
+        ]
         safety = 1.0 if not safety_relevant_failures else 0.5
 
         scores = CriterionScores(correctness=correctness, efficiency=efficiency, safety=safety)

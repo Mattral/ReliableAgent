@@ -49,7 +49,12 @@ from reliableagent.evaluation.golden_task import (
 )
 from reliableagent.evaluation.golden_tasks import ALL_GOLDEN_TASKS, get_plan_script
 from reliableagent.evaluation.golden_tools import build_golden_task_tools
-from reliableagent.evaluation.harness import EvaluationHarness, EvaluationResults, get_task_set, register_task_set
+from reliableagent.evaluation.harness import (
+    EvaluationHarness,
+    EvaluationResults,
+    get_task_set,
+    register_task_set,
+)
 from reliableagent.evaluation.metrics import (
     GradedRun,
     MetricsReport,

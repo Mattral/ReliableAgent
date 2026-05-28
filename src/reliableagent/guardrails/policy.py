@@ -54,7 +54,9 @@ class PolicyRule:
     name: str
     pattern: str
     action: GuardrailVerdict = GuardrailVerdict.BLOCK
-    scope: frozenset[GuardrailBoundary] = field(default_factory=lambda: frozenset(GuardrailBoundary))
+    scope: frozenset[GuardrailBoundary] = field(
+        default_factory=lambda: frozenset(GuardrailBoundary)
+    )
     redaction_text: str = "[REDACTED]"
     case_sensitive: bool = False
 
@@ -92,8 +94,10 @@ class PolicyGuardrail(Guardrail):
         # that union is still enforced correctly inside `check()`; this
         # union is just what lets the GuardrailRunner know to bother
         # calling this guardrail at all for a given boundary.
-        self.boundaries = boundaries or frozenset(b for rule in rules for b in rule.scope) or frozenset(
-            GuardrailBoundary
+        self.boundaries = (
+            boundaries
+            or frozenset(b for rule in rules for b in rule.scope)
+            or frozenset(GuardrailBoundary)
         )
 
     def check(self, boundary: GuardrailBoundary, payload: Any) -> GuardrailDecision:

@@ -114,7 +114,10 @@ ARITHMETIC_PLAN_SCRIPTS: dict[str, list[str]] = {
     ],
     "arith_simple_subtraction": [
         _plan(
-            [_tool_step("subtract 37 from 100", "subtract", {"a": 100, "b": 37}), _final("The result is 63.")]
+            [
+                _tool_step("subtract 37 from 100", "subtract", {"a": 100, "b": 37}),
+                _final("The result is 63."),
+            ]
         )
     ],
     "arith_multi_step_chain": [
@@ -172,7 +175,9 @@ FACT_LOOKUP_PLAN_SCRIPTS: dict[str, list[str]] = {
     "fact_capital_of_france": [
         _plan(
             [
-                _tool_step("look up capital of France", "lookup_fact", {"query": "capital of france"}),
+                _tool_step(
+                    "look up capital of France", "lookup_fact", {"query": "capital of france"}
+                ),
                 _final("The capital of France is Paris."),
             ]
         )
@@ -180,7 +185,9 @@ FACT_LOOKUP_PLAN_SCRIPTS: dict[str, list[str]] = {
     "fact_capital_of_japan": [
         _plan(
             [
-                _tool_step("look up capital of Japan", "lookup_fact", {"query": "capital of japan"}),
+                _tool_step(
+                    "look up capital of Japan", "lookup_fact", {"query": "capital of japan"}
+                ),
                 _final("The capital of Japan is Tokyo."),
             ]
         )
@@ -214,21 +221,27 @@ FAILURE_RECOVERY_TASKS = [
     GoldenTask(
         task_id="recovery_flaky_tool_succeeds_after_replan",
         category="failure_recovery",
-        build_task=lambda: Task(description="Look up 'gold price' using the flaky lookup tool.", max_replans=2),
+        build_task=lambda: Task(
+            description="Look up 'gold price' using the flaky lookup tool.", max_replans=2
+        ),
         grade=contains_all_grader(["recovered"]),
         tags=("needs_replan",),
     ),
     GoldenTask(
         task_id="recovery_falls_back_to_alternate_tool",
         category="failure_recovery",
-        build_task=lambda: Task(description="Compute 6 times 7, trying a broken approach first.", max_replans=2),
+        build_task=lambda: Task(
+            description="Compute 6 times 7, trying a broken approach first.", max_replans=2
+        ),
         grade=numeric_tolerance_grader(42.0),
         tags=("needs_replan",),
     ),
     GoldenTask(
         task_id="recovery_exhausts_replans_and_fails_cleanly",
         category="failure_recovery",
-        build_task=lambda: Task(description="Repeatedly call a tool that always fails.", max_replans=1),
+        build_task=lambda: Task(
+            description="Repeatedly call a tool that always fails.", max_replans=1
+        ),
         grade=custom_predicate_grader(
             lambda r: r.final_state == OrchestratorState.FAILED
             and r.failure_category is not None
@@ -241,7 +254,9 @@ FAILURE_RECOVERY_TASKS = [
     GoldenTask(
         task_id="recovery_multi_step_with_one_failure",
         category="failure_recovery",
-        build_task=lambda: Task(description="Add 10 and 20 but the first attempt uses a broken tool.", max_replans=2),
+        build_task=lambda: Task(
+            description="Add 10 and 20 but the first attempt uses a broken tool.", max_replans=2
+        ),
         grade=numeric_tolerance_grader(30.0),
         tags=("needs_replan",),
     ),
@@ -292,7 +307,9 @@ GUARDRAIL_TASKS = [
         task_id="guardrail_blocks_disallowed_keyword_in_plan",
         category="guardrail",
         build_task=lambda: Task(description="Do something that should trip a policy guardrail."),
-        grade=custom_predicate_grader(_was_blocked_by_guardrail, "run is blocked by a guardrail, not completed"),
+        grade=custom_predicate_grader(
+            _was_blocked_by_guardrail, "run is blocked by a guardrail, not completed"
+        ),
         expect_failure=True,
         tags=("expected_failure",),
     ),
@@ -300,7 +317,9 @@ GUARDRAIL_TASKS = [
         task_id="guardrail_blocks_empty_final_answer",
         category="guardrail",
         build_task=lambda: Task(description="Produce an empty final answer."),
-        grade=custom_predicate_grader(_was_blocked_by_guardrail, "run is blocked for an empty final answer"),
+        grade=custom_predicate_grader(
+            _was_blocked_by_guardrail, "run is blocked for an empty final answer"
+        ),
         expect_failure=True,
         tags=("expected_failure",),
     ),
@@ -308,7 +327,9 @@ GUARDRAIL_TASKS = [
         task_id="guardrail_blocks_oversized_tool_arguments",
         category="guardrail",
         build_task=lambda: Task(description="Call a tool with a huge number of arguments."),
-        grade=custom_predicate_grader(_was_blocked_by_guardrail, "run is blocked for malformed tool arguments"),
+        grade=custom_predicate_grader(
+            _was_blocked_by_guardrail, "run is blocked for malformed tool arguments"
+        ),
         expect_failure=True,
         tags=("expected_failure",),
     ),
@@ -375,7 +396,9 @@ TEXT_PROCESSING_TASKS = [
     GoldenTask(
         task_id="text_no_tool_reasoning_task",
         category="text_processing",
-        build_task=lambda: Task(description="Without using any tool, state that 2 is an even number."),
+        build_task=lambda: Task(
+            description="Without using any tool, state that 2 is an even number."
+        ),
         grade=contains_all_grader(["even"]),
         tags=("no_tools",),
     ),

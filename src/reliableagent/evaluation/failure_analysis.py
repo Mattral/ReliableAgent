@@ -101,7 +101,9 @@ def analyze_failures(graded_runs: list[GradedRun]) -> FailureAnalysisReport:
             key=lambda k: metrics.failure_category_distribution[k],
         )
 
-    return FailureAnalysisReport(metrics=metrics, failures=failures, most_common_failure_category=most_common)
+    return FailureAnalysisReport(
+        metrics=metrics, failures=failures, most_common_failure_category=most_common
+    )
 
 
 def _build_failure_detail(run: GradedRun) -> FailureDetail:

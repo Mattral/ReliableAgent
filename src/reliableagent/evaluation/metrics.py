@@ -187,7 +187,9 @@ def _compute_flat_metrics(graded_runs: list[GradedRun]) -> MetricsReport:
     )
     guardrail_intervention_rate = runs_with_guardrail_intervention / total if total else 0.0
 
-    failed_runs_list = [r for r in graded_runs if not r.passed and r.run_result.failure_category is not None]
+    failed_runs_list = [
+        r for r in graded_runs if not r.passed and r.run_result.failure_category is not None
+    ]
     failure_category_distribution: dict[str, float] = {}
     if failed_runs_list:
         counts: dict[str, int] = {}

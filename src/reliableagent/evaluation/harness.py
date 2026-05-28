@@ -1,12 +1,16 @@
-"""EvaluationHarness: matches the roadmap's EvaluationHarness(orchestrator=...).evaluate(task_set=..., seeds=...)
-DX. Named task-set registry; 'golden_suite_v1' registered by default.
+"""EvaluationHarness: matches the roadmap's
+EvaluationHarness(orchestrator=...).evaluate(task_set=..., seeds=...) DX.
+Named task-set registry; 'golden_suite_v1' registered by default.
 
-Mock-backed orchestrators get a freshly-scripted Orchestrator per golden task (reusing caller's
-Critic/Guardrails/Tools/sink). Real-LLM-backed orchestrators are reused as-is across all tasks/seeds.
+Mock-backed orchestrators get a freshly-scripted Orchestrator per golden
+task (reusing caller's Critic/Guardrails/Tools/sink). Real-LLM-backed
+orchestrators are reused as-is across all tasks/seeds.
 The caller-owned orchestrator is NEVER shut down by this class.
 """
 from __future__ import annotations
+
 from dataclasses import dataclass
+
 from reliableagent.core.orchestrator import Orchestrator
 from reliableagent.evaluation.factory import mock_llm_for_golden_task
 from reliableagent.evaluation.failure_analysis import FailureAnalysisReport, analyze_failures
@@ -25,7 +29,9 @@ def register_task_set(name: str, tasks: list[GoldenTask]) -> None:
 
 def get_task_set(name: str) -> list[GoldenTask]:
     if name not in _REGISTRY:
-        raise KeyError(f"No task set {name!r}. Available: {sorted(_REGISTRY)}. Use register_task_set().")
+        raise KeyError(
+            f"No task set {name!r}. Available: {sorted(_REGISTRY)}. Use register_task_set()."
+        )
     return _REGISTRY[name]
 
 
@@ -46,7 +52,10 @@ class EvaluationResults:
 
 
 class EvaluationHarness:
-    """Matches the roadmap's EvaluationHarness DX. Never shuts down the caller-owned orchestrator."""
+    """Matches the roadmap's EvaluationHarness DX.
+
+    Never shuts down the caller-owned orchestrator.
+    """
 
     def __init__(self, orchestrator: Orchestrator) -> None:
         self._orch = orchestrator

@@ -1,7 +1,11 @@
 """LLM usage and latency tracking: decorator pattern, no Planner/Critic contract changes."""
+
 from __future__ import annotations
-import threading, time
+
+import threading
+import time
 from dataclasses import dataclass, field
+
 from reliableagent.llm.base import LLMClient, LLMMessage, LLMResponse
 
 
