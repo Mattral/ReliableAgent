@@ -175,7 +175,8 @@ def main() -> None:
 
     print(
         f"Profiling the full {len(ALL_GOLDEN_TASKS)}-task golden suite "
-        f"({args.repeat} run(s), retry_backoff={'disabled' if args.no_retry_backoff else 'default'})...\n"
+        f"({args.repeat} run(s), retry_backoff="
+        f"{'disabled' if args.no_retry_backoff else 'default'})...\n"
     )
 
     accumulated_layers: dict[str, float] = defaultdict(float)

@@ -10,8 +10,11 @@ Uses MockLLMClient throughout so this runs instantly, for free, with no
 API key or network access required.
 """
 from __future__ import annotations
-import json, sys
+
+import json
+import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from reliableagent import ReliableOrchestrator, ToolRegistry
@@ -75,16 +78,26 @@ def main() -> None:
         "reasoning_trace": "Search for recent developments, then summarize.",
         "confidence": 0.85,
         "steps": [
-            {"step_type": "tool_call", "description": "search for speculative decoding developments",
-             "tool_name": "my_search_tool", "tool_arguments": {"query": "speculative decoding recent developments"}},
-            {"step_type": "final_answer", "description":
-             "Recent speculative decoding research focuses on better draft-model "
-             "selection and verification strategies to reduce wall-clock latency."},
+            {
+                "step_type": "tool_call",
+                "description": "search for speculative decoding developments",
+                "tool_name": "my_search_tool",
+                "tool_arguments": {"query": "speculative decoding recent developments"},
+            },
+            {
+                "step_type": "final_answer",
+                "description": (
+                    "Recent speculative decoding research focuses on better "
+                    "draft-model selection and verification strategies to "
+                    "reduce wall-clock latency."
+                ),
+            },
         ],
     })
 
     orchestrator = ReliableOrchestrator(
-        llm_client=MockLLMClient(responses=[scripted_plan]),  # swap for model="claude-sonnet-4-6" for a real model
+        # Swap for model="claude-sonnet-4-6" to use a real model instead.
+        llm_client=MockLLMClient(responses=[scripted_plan]),
         tools=tools,
         guardrails=[BasicGuardrail()],
         enable_checkpointing=True,
