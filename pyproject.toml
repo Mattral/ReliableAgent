@@ -37,6 +37,7 @@ dev = [
     "ruff>=0.6.0",
     "mypy>=1.10",
     "pre-commit>=3.7",
+    "types-PyYAML>=6.0",
 ]
 
 [project.urls]
@@ -67,6 +68,13 @@ select = [
     "C4",  # comprehensions
     "SIM", # simplify
     "RUF", # ruff-specific
+    "BLE",  # flake8-blind-except: catches bare `except Exception`; every
+            # instance in this codebase already carries a justified
+            # `# noqa: BLE001` explaining why that boundary intentionally
+            # catches broadly (e.g. "never let a tool crash the control
+            # loop") -- this rule was always the intent, just never
+            # actually added to this list until a real ruff run showed
+            # those comments as unused.
 ]
 ignore = [
     "ANN101", # missing-type-self (deprecated rule)
@@ -96,6 +104,14 @@ ignore = [
     # public functions where it aids clarity, just not enforced by ruff.
 "scripts/**/*.py" = ["ANN"]  # same reasoning as examples/ above
 "tests/**/*.py" = ["S101", "ANN201", "ANN001", "S105", "S106"]
+"src/reliableagent/_compat/_fallback.py" = ["ANN401"]
+    # This file is, by design, a from-scratch reimplementation of the
+    # dynamically-typed slice of the Pydantic v2 API (see adr/0001) --
+    # `Any` is the CORRECT type for a field's default, a coerced value,
+    # or a validator's raw input in a library that stands in for a
+    # dynamically-typed validation library. ANN401 (no explicit Any) is
+    # exactly the wrong rule for this one file, for the same reason it's
+    # the right rule everywhere else in this codebase.
 
 [tool.ruff.lint.isort]
 known-first-party = ["reliableagent"]
@@ -116,6 +132,35 @@ no_implicit_optional = true
 check_untyped_defs = true
 show_error_codes = true
 plugins = ["pydantic.mypy"]
+
+# `packages = ["reliableagent"]` above only scopes mypy when it's invoked
+# with no path arguments (plain `mypy`). Running `mypy .` or
+# `mypy src/reliableagent tests` (both common, reasonable invocations)
+# bypasses that scoping entirely and applies `strict = true` -- including
+# `disallow_untyped_defs` -- to test/example/script code, which was never
+# meant to be held to the library's own strictness bar (matching exactly
+# the reasoning behind ruff's `ANN` exemptions for the same three
+# directories, see the `[tool.ruff.lint.per-file-ignores]` section
+# above). These overrides make `mypy .` behave sanely regardless of the
+# exact invocation, rather than relying on everyone remembering to run
+# bare `mypy`.
+[[tool.mypy.overrides]]
+module = ["tests.*", "scripts.*", "examples.*"]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+warn_return_any = false
+
+# This project's `_compat/_fallback.py` is, by design, a from-scratch
+# reimplementation of the dynamically-typed slice of the Pydantic v2 API
+# (see `adr/0001`) -- it legitimately needs `Any` throughout (field
+# values, defaults, coerced results) in a way ordinary application code
+# should not. `disallow_any_explicit` isn't even enabled here, but
+# `warn_return_any`/strict mode's related checks are noisy for exactly
+# this one file for the same underlying reason; scoped narrowly rather
+# than relaxed project-wide.
+[[tool.mypy.overrides]]
+module = "reliableagent._compat._fallback"
+warn_return_any = false
 
 [[tool.mypy.overrides]]
 module = "anthropic.*"
