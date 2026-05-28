@@ -7,10 +7,16 @@ built or installed in this project's entire development history.
 Usage: python scripts/verify_build.py
 """
 from __future__ import annotations
-import os, subprocess, sys, tempfile, venv
+
+import os
+import subprocess
+import sys
+import tempfile
+import venv
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
 
 def run(cmd):
     print(f"$ {' '.join(cmd)}")
@@ -54,7 +60,8 @@ def main() -> int:
             "from reliableagent.guardrails import BasicGuardrail; import json; "
             "tools=ToolRegistry(); tools.register(lambda a,b:a+b,name='add',description='adds'); "
             "plan=json.dumps({'reasoning_trace':'x','confidence':0.9,'steps':["
-            "{'step_type':'tool_call','description':'add','tool_name':'add','tool_arguments':{'a':1,'b':1}},"
+            "{'step_type':'tool_call','description':'add',"
+            "'tool_name':'add','tool_arguments':{'a':1,'b':1}},"
             "{'step_type':'final_answer','description':'two'}]}); "
             "orch=Orchestrator(planner=LLMPlanner(MockLLMClient(responses=[plan])),"
             "critic=ThresholdCritic(),tools=tools,guardrails=[BasicGuardrail()]); "
