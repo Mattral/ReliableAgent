@@ -19,7 +19,17 @@ try:
 
     PYDANTIC_AVAILABLE = True
 except ImportError:  # pragma: no cover - exercised only without pydantic installed
-    from reliableagent._compat._fallback import (
+    # mypy statically analyzes BOTH branches of this try/except, even
+    # though only one ever actually executes at runtime -- so it sees
+    # this branch's fallback BaseModel/ConfigDict/Field/etc. as
+    # "redefining" names already bound to real Pydantic's types in the
+    # try block above, and flags an incompatible-type "redefinition."
+    # This is a well-documented mypy limitation with conditional/fallback
+    # imports of the same name (not a real bug: at runtime, exactly one
+    # of these two branches ever executes), and the standard, minimal
+    # fix is exactly what's below -- targeted type: ignore comments on
+    # this branch only, not a redesign of a pattern that works correctly.
+    from reliableagent._compat._fallback import (  # type: ignore[assignment,no-redef]
         BaseModel,
         ConfigDict,
         Field,

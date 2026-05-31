@@ -88,7 +88,7 @@ def _cached_type_hints(cls: type) -> dict[str, Any]:
     return cached
 
 
-class ConfigDict(dict):
+class ConfigDict(dict[str, Any]):
     """Passthrough stand-in for pydantic.ConfigDict (just a typed dict)."""
 
 
@@ -151,7 +151,7 @@ class ValidationError(ValueError):
     """Raised when constructing or validating a model fails."""
 
 
-def field_validator(  # noqa: N802
+def field_validator(
     field_name: str, *_more_fields: str
 ) -> Callable[[Callable[..., Any]], classmethod[Any, Any, Any]]:
     """Stand-in for pydantic.field_validator (only supports 'after'-style validators).
@@ -299,12 +299,18 @@ def _coerce_value(value: Any, annotation: Any) -> Any:
 def _check_constraints(name: str, value: Any, info: FieldInfo) -> None:
     if value is None:
         return
-    if info.min_length is not None and hasattr(value, "__len__"):
-        if len(value) < info.min_length:
-            raise ValidationError(f"{name}: length must be >= {info.min_length}")
-    if info.max_length is not None and hasattr(value, "__len__"):
-        if len(value) > info.max_length:
-            raise ValidationError(f"{name}: length must be <= {info.max_length}")
+    if (
+        info.min_length is not None
+        and hasattr(value, "__len__")
+        and len(value) < info.min_length
+    ):
+        raise ValidationError(f"{name}: length must be >= {info.min_length}")
+    if (
+        info.max_length is not None
+        and hasattr(value, "__len__")
+        and len(value) > info.max_length
+    ):
+        raise ValidationError(f"{name}: length must be <= {info.max_length}")
     if info.ge is not None and isinstance(value, (int, float)) and value < info.ge:
         raise ValidationError(f"{name}: must be >= {info.ge}")
     if info.le is not None and isinstance(value, (int, float)) and value > info.le:
@@ -358,6 +364,8 @@ class BaseModel:
             if attr_name.startswith("__"):
                 continue
             attr = cls.__dict__.get(attr_name)
+            if attr is None:
+                continue
             validator_fields = getattr(attr, "__validator_fields__", None)
             if not validator_fields:
                 continue
@@ -429,7 +437,7 @@ class BaseModel:
         """Serialize the model into a JSON string."""
         return json.dumps(self.model_dump(mode="json"), indent=indent, default=str)
 
-    def model_copy(self, *, update: dict[str, Any] | None = None) -> "BaseModel":
+    def model_copy(self, *, update: dict[str, Any] | None = None) -> BaseModel:
         """Return a shallow copy of the model, optionally overriding some fields."""
         data = self.model_dump(mode="python")
         if update:
@@ -437,7 +445,7 @@ class BaseModel:
         return type(self)(**data)
 
     @classmethod
-    def model_validate(cls, data: dict[str, Any]) -> "BaseModel":
+    def model_validate(cls, data: dict[str, Any]) -> BaseModel:
         """Construct and validate a model instance from a dict."""
         return cls(**data)
 
@@ -468,9 +476,10 @@ def _collect_plain_defaults(
     for key in annotations:
         if key in namespace and not isinstance(namespace[key], FieldInfo):
             value = namespace[key]
-            if not isinstance(value, (classmethod, staticmethod)) and not callable(value):
-                plain[key] = value
-            elif isinstance(value, Enum):
+            is_plain_value = not isinstance(value, (classmethod, staticmethod)) and not callable(
+                value
+            )
+            if is_plain_value or isinstance(value, Enum):
                 plain[key] = value
     return plain
 
@@ -513,5 +522,5 @@ class _BaseModelMeta(type):
 
 # Rebuild BaseModel with the metaclass applied (can't change metaclass post-hoc
 # cleanly, so we redefine via a thin subclass pattern instead).
-class BaseModel(BaseModel, metaclass=_BaseModelMeta):  # type: ignore[misc,no-redef]
+class BaseModel(BaseModel, metaclass=_BaseModelMeta):  # type: ignore[no-redef]
     pass
