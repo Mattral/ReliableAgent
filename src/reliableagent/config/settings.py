@@ -111,7 +111,7 @@ class ReliableAgentConfig(BaseModel):
     observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)
 
     @classmethod
-    def from_yaml(cls, path: str | Path) -> "ReliableAgentConfig":
+    def from_yaml(cls, path: str | Path) -> ReliableAgentConfig:
         """Load configuration from a YAML file.
 
         Raises:
@@ -134,7 +134,7 @@ class ReliableAgentConfig(BaseModel):
         return cls.from_dict(raw)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ReliableAgentConfig":
+    def from_dict(cls, data: dict[str, Any]) -> ReliableAgentConfig:
         """Construct configuration from a plain dict (e.g. parsed YAML/JSON)."""
         try:
             return cls(**data)
