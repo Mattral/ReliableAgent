@@ -11,10 +11,12 @@ from __future__ import annotations
 from reliableagent.core.models import RunResult, Task
 from reliableagent.core.orchestrator import Orchestrator
 from reliableagent.executor.tool_registry import ToolRegistry
+from reliableagent.guardrails.base import Guardrail
+from reliableagent.llm.base import LLMClient
 from reliableagent.llm.mock import MockLLMClient
 from reliableagent.memory.backend import FileMemoryBackend, InMemoryBackend
 from reliableagent.observability.sinks import ConsoleSink, InMemorySink
-from reliableagent.planner.critic import ThresholdCritic
+from reliableagent.planner.critic import Critic, ThresholdCritic
 from reliableagent.planner.llm_planner import LLMPlanner
 
 
@@ -23,15 +25,24 @@ class ReliableOrchestrator:
     `ReliableOrchestrator(model=..., tools=..., ...)` DX.
     """
 
-    def __init__(self, *, tools: ToolRegistry, guardrails=None, model=None,
-                 llm_client=None, critic=None,
-                 enable_checkpointing: bool = False,
-                 enable_observability: bool = False,
-                 checkpoint_dir: str = ".reliableagent/checkpoints") -> None:
+    def __init__(
+        self,
+        *,
+        tools: ToolRegistry,
+        guardrails: list[Guardrail] | None = None,
+        model: str | None = None,
+        llm_client: LLMClient | None = None,
+        critic: Critic | None = None,
+        enable_checkpointing: bool = False,
+        enable_observability: bool = False,
+        checkpoint_dir: str = ".reliableagent/checkpoints",
+    ) -> None:
+        resolved_client: LLMClient
         if llm_client is not None:
             resolved_client = llm_client
         elif model is not None:
             from reliableagent.llm.anthropic_client import AnthropicLLMClient
+
             resolved_client = AnthropicLLMClient(model=model)
         else:
             resolved_client = MockLLMClient()
@@ -45,7 +56,7 @@ class ReliableOrchestrator:
             sink=ConsoleSink() if enable_observability else InMemorySink(),
         )
 
-    def run(self, task, *, max_steps: int = 20, max_replans: int = 3) -> RunResult:
+    def run(self, task: str | Task, *, max_steps: int = 20, max_replans: int = 3) -> RunResult:
         resolved = (
             task
             if isinstance(task, Task)
@@ -59,5 +70,8 @@ class ReliableOrchestrator:
     def shutdown(self) -> None:
         self._orchestrator.shutdown()
 
-    def __enter__(self): return self
-    def __exit__(self, *_): self.shutdown()
+    def __enter__(self) -> ReliableOrchestrator:
+        return self
+
+    def __exit__(self, *_exc_info: object) -> None:
+        self.shutdown()

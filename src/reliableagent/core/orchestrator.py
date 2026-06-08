@@ -35,8 +35,8 @@ edges.
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 from reliableagent.core.enums import (
     FailureCategory,
@@ -58,7 +58,6 @@ from reliableagent.core.models import (
     Trajectory,
 )
 from reliableagent.core.state_machine import StateMachine
-from reliableagent.executor.executor import Executor
 from reliableagent.exceptions import (
     ExecutionError,
     GuardrailViolationError,
@@ -69,9 +68,12 @@ from reliableagent.exceptions import (
     StepBudgetExceededError,
     ToolTimeoutError,
 )
+from reliableagent.executor.executor import Executor
+from reliableagent.executor.tool_registry import ToolRegistry
+from reliableagent.guardrails.base import Guardrail
 from reliableagent.guardrails.runner import GuardrailRunner
 from reliableagent.memory.backend import InMemoryBackend, MemoryBackend
-from reliableagent.observability.sinks import InMemorySink
+from reliableagent.observability.sinks import EventSink, InMemorySink
 from reliableagent.observability.tracer import Tracer
 from reliableagent.planner.base import Planner
 from reliableagent.planner.critic import Critic
@@ -105,14 +107,14 @@ class Orchestrator:
         *,
         planner: Planner,
         critic: Critic,
-        tools,
-        guardrails: list | None = None,
+        tools: ToolRegistry,
+        guardrails: list[Guardrail] | None = None,
         memory: MemoryBackend | None = None,
         executor: Executor | None = None,
-        sink=None,
+        sink: EventSink | None = None,
         checkpoint_every_step: bool = True,
         replanner: Replanner | None = None,
-        usage_tracker: "LLMUsageStats | None" = None,
+        usage_tracker: LLMUsageStats | None = None,
     ) -> None:
         self._planner = planner
         self._critic = critic
@@ -135,35 +137,35 @@ class Orchestrator:
     # ------------------------------------------------------------------
 
     @property
-    def planner(self):
+    def planner(self) -> Planner:
         return self._planner
 
     @property
-    def critic(self):
+    def critic(self) -> Critic:
         return self._critic
 
     @property
-    def tools(self):
+    def tools(self) -> ToolRegistry:
         return self._tools
 
     @property
-    def guardrails(self) -> list:
+    def guardrails(self) -> list[Guardrail]:
         return self._guardrail_runner.guardrails
 
     @property
-    def memory(self):
+    def memory(self) -> MemoryBackend:
         return self._memory
 
     @property
-    def executor(self):
+    def executor(self) -> Executor:
         return self._executor
 
     @property
-    def replanner(self):
+    def replanner(self) -> Replanner:
         return self._replanner
 
     @property
-    def sink(self):
+    def sink(self) -> EventSink:
         return self._sink
 
     # ------------------------------------------------------------------
@@ -473,6 +475,11 @@ class Orchestrator:
             )
             trajectory.add_step_record(record)
             tracer.emit_step_completed(step, StepStatus.BLOCKED_BY_GUARDRAIL.value)
+            # Invariant: GuardrailRunResult.blocking_decision is always
+            # set when allowed is False (see GuardrailRunner.run) -- this
+            # assert documents that invariant for mypy, which can't infer
+            # it from the dataclass's field types alone.
+            assert guard_result.blocking_decision is not None
             raise GuardrailViolationError(
                 guard_result.blocking_decision.reason,
                 guardrail_name=guard_result.blocking_decision.guardrail_name,
@@ -526,6 +533,9 @@ class Orchestrator:
             trajectory.add_guardrail_decision(decision)
             tracer.emit_guardrail_evaluated(decision)
         if not result.allowed:
+            # Invariant: GuardrailRunResult.blocking_decision is always
+            # set when allowed is False (see GuardrailRunner.run).
+            assert result.blocking_decision is not None
             raise GuardrailViolationError(
                 result.blocking_decision.reason,
                 guardrail_name=result.blocking_decision.guardrail_name,

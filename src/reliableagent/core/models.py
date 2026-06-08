@@ -124,7 +124,7 @@ class PlanStep(_BaseFrozenModel):
     )
 
     @model_validator(mode="after")
-    def _tool_name_required_for_tool_calls(self) -> "PlanStep":
+    def _tool_name_required_for_tool_calls(self) -> PlanStep:
         """`tool_name` is required when `step_type == TOOL_CALL`.
 
         This was previously a `@field_validator("tool_name")` reading
