@@ -38,6 +38,7 @@ Categories represented (5 categories x 4 tasks = 20 tasks):
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from reliableagent.core.enums import OrchestratorState
 from reliableagent.core.models import RunResult, Task
@@ -50,11 +51,13 @@ from reliableagent.evaluation.golden_task import (
 )
 
 
-def _plan(steps: list[dict], reasoning_trace: str = "executing golden task plan") -> str:
+def _plan(steps: list[dict[str, Any]], reasoning_trace: str = "executing golden task plan") -> str:
     return json.dumps({"reasoning_trace": reasoning_trace, "confidence": 0.9, "steps": steps})
 
 
-def _tool_step(description: str, tool_name: str, arguments: dict | None = None) -> dict:
+def _tool_step(
+    description: str, tool_name: str, arguments: dict[str, Any] | None = None
+) -> dict[str, Any]:
     return {
         "step_type": "tool_call",
         "description": description,
@@ -63,7 +66,7 @@ def _tool_step(description: str, tool_name: str, arguments: dict | None = None) 
     }
 
 
-def _final(description: str) -> dict:
+def _final(description: str) -> dict[str, Any]:
     return {"step_type": "final_answer", "description": description}
 
 
