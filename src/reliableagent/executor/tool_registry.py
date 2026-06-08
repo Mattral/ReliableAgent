@@ -40,7 +40,7 @@ class ToolSpec:
     argument_model: type[BaseModel] | None
     timeout_seconds: float = 30.0
     is_async: bool = field(default=False)
-    result_validator: object = None
+    result_validator: Callable[[Any], bool] | None = None
 
     def to_prompt_schema(self) -> dict[str, Any]:
         """Render a compact, planner-friendly description of this tool.
@@ -84,7 +84,7 @@ class ToolRegistry:
         description: str = "",
         argument_model: type[BaseModel] | None = None,
         timeout_seconds: float = 30.0,
-        result_validator=None,
+        result_validator: Callable[[Any], bool] | None = None,
     ) -> Callable[..., Any]:
         """Register a tool, usable either as a decorator or a direct call.
 
@@ -139,7 +139,7 @@ class ToolRegistry:
         """Return all registered tool specs, for prompt construction."""
         return list(self._tools.values())
 
-    def validate_result(self, name: str, result) -> bool:
+    def validate_result(self, name: str, result: Any) -> bool:
         """Run the registered result_validator (if any) against a successful call's output.
         Returns True when no validator is registered (trust-by-default), or False when
         the validator rejects the output or itself raises."""
@@ -148,7 +148,7 @@ class ToolRegistry:
             return True
         try:
             return bool(spec.result_validator(result))
-        except Exception:
+        except Exception:  # noqa: BLE001 - a crashing validator means "not trusted"
             return False
 
     def validate_arguments(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:

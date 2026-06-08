@@ -71,7 +71,7 @@ class Executor:
             )
             self._tracer.emit_tool_call_completed(call, result)
             return result
-        except Exception as exc:  # ToolArgumentValidationError, etc.
+        except Exception as exc:  # noqa: BLE001 - a bad tool call must never crash the Executor
             result = ToolResult(
                 call_id=call.call_id,
                 success=False,
@@ -158,7 +158,7 @@ class Executor:
         """Release the underlying thread pool. Call when done with the Executor."""
         self._pool.shutdown(wait=False, cancel_futures=True)
 
-    def __enter__(self) -> "Executor":
+    def __enter__(self) -> Executor:
         return self
 
     def __exit__(self, *exc_info: object) -> None:
