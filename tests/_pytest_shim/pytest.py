@@ -79,8 +79,8 @@ class _Approx:
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, (int, float)):
             return NotImplemented
-        diff = abs(self.value - other)  # type: ignore[name-defined]
-        return diff <= max(self.rel * abs(self.value), self.abs)  # type: ignore[name-defined]
+        diff = abs(self.value - other)
+        return diff <= max(self.rel * abs(self.value), self.abs)
 
 
 class _MarkDecorators:

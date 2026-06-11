@@ -9,13 +9,14 @@ docstring for the full rationale).
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from reliableagent.core.models import Task
 from reliableagent.executor.tool_registry import ToolRegistry
 from reliableagent.llm.mock import MockLLMClient
 
 
-def make_task(description: str = "A test task", **kwargs) -> Task:
+def make_task(description: str = "A test task", **kwargs: Any) -> Task:
     """Construct a `Task` with sensible test defaults."""
     return Task(description=description, **kwargs)
 
@@ -36,7 +37,7 @@ def make_tool_registry() -> ToolRegistry:
 
 
 def plan_json(
-    steps: list[dict],
+    steps: list[dict[str, Any]],
     *,
     reasoning_trace: str = "test reasoning",
     confidence: float = 0.9,
@@ -65,7 +66,9 @@ def critic_json(
     )
 
 
-def tool_call_step(description: str, tool_name: str, arguments: dict | None = None) -> dict:
+def tool_call_step(
+    description: str, tool_name: str, arguments: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """Build a raw plan-step dict for a tool_call step."""
     return {
         "step_type": "tool_call",
@@ -75,7 +78,7 @@ def tool_call_step(description: str, tool_name: str, arguments: dict | None = No
     }
 
 
-def final_answer_step(description: str) -> dict:
+def final_answer_step(description: str) -> dict[str, Any]:
     """Build a raw plan-step dict for a final_answer step."""
     return {"step_type": "final_answer", "description": description}
 

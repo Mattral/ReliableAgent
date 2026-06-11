@@ -75,7 +75,9 @@ def test_orchestrator_records_full_trajectory():
         traj = result.trajectory
         assert len(traj.plans) == 1
         assert len(traj.step_records) == 2
-        assert traj.step_records[0].tool_result.success is True
+        first_result = traj.step_records[0].tool_result
+        assert first_result is not None
+        assert first_result.success is True
         assert len(traj.checkpoints) >= 1
     finally:
         orchestrator.shutdown()
