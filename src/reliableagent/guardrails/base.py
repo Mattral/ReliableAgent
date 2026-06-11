@@ -73,7 +73,7 @@ class Guardrail(ABC):
     # helpers don't need the boundary repeated at every call site.
     _current_boundary: GuardrailBoundary = GuardrailBoundary.PLANNER_INPUT
 
-    def _with_boundary(self, boundary: GuardrailBoundary) -> "Guardrail":
+    def _with_boundary(self, boundary: GuardrailBoundary) -> Guardrail:
         self._current_boundary = boundary
         return self
 

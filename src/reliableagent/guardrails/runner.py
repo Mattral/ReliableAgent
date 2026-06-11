@@ -40,7 +40,7 @@ class GuardrailRunner:
         self._guardrails = guardrails or []
 
     @property
-    def guardrails(self) -> list:
+    def guardrails(self) -> list[Guardrail]:
         """Defensive copy of configured guardrails."""
         return list(self._guardrails)
 
