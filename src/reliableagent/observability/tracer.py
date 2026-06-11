@@ -36,7 +36,7 @@ class Tracer:
         self._sink = sink
 
     @classmethod
-    def noop(cls, run_id: str = "unbound") -> "Tracer":
+    def noop(cls, run_id: str = "unbound") -> Tracer:
         """A Tracer with an in-memory sink, useful as a safe default for
         components (like `Executor`) constructed without an explicit
         tracer, e.g. in lightweight unit tests."""

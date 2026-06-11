@@ -9,9 +9,10 @@ versioned prompt management later.
 from __future__ import annotations
 
 import json
+from typing import Any
 
-from reliableagent.executor.tool_registry import ToolRegistry
 from reliableagent.core.models import PlanStep, ToolResult
+from reliableagent.executor.tool_registry import ToolRegistry
 
 PLANNER_SYSTEM_PROMPT = """You are the Planner component of an autonomous agent framework.
 Given a task and a list of available tools, produce a step-by-step plan to \
@@ -173,7 +174,7 @@ def build_step_critique_user_prompt(step: PlanStep, result: ToolResult) -> str:
     )
 
 
-def safe_json_loads(text: str) -> dict:
+def safe_json_loads(text: str) -> dict[str, Any]:
     """Parse `text` as JSON, stripping common LLM-added markdown fences first.
 
     LLMs frequently wrap JSON in ```json ... ``` fences even when
@@ -181,6 +182,12 @@ def safe_json_loads(text: str) -> dict:
     layer is robust to that without weakening the prompt's
     instructions or adding retry round-trips for a purely cosmetic
     issue.
+
+    Every call site expects a JSON *object* (a plan or a feedback
+    payload) -- raises `ValueError` with a clear message if the parsed
+    JSON is some other type (an array, a bare string, etc.), rather
+    than silently returning something callers would fail on far less
+    clearly a few lines later.
     """
     stripped = text.strip()
     if stripped.startswith("```"):
@@ -190,4 +197,9 @@ def safe_json_loads(text: str) -> dict:
         if lines and lines[-1].startswith("```"):
             lines = lines[:-1]
         stripped = "\n".join(lines)
-    return json.loads(stripped)
+    parsed = json.loads(stripped)
+    if not isinstance(parsed, dict):
+        raise ValueError(
+            f"Expected a JSON object, got {type(parsed).__name__}: {stripped[:200]!r}"
+        )
+    return parsed

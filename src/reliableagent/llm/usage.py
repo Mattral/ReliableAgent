@@ -33,7 +33,7 @@ class LLMUsageStats:
     def average_latency_seconds(self) -> float:
         return self.total_latency_seconds / self.total_calls if self.total_calls else 0.0
 
-    def snapshot(self) -> "LLMUsageStats":
+    def snapshot(self) -> LLMUsageStats:
         with self._lock:
             return LLMUsageStats(
                 total_calls=self.total_calls,
@@ -53,11 +53,18 @@ class UsageTrackingLLMClient:
     def stats(self) -> LLMUsageStats:
         return self._stats
 
-    def complete(self, messages: list[LLMMessage], *, system=None,
-                 max_tokens: int = 1024, temperature: float = 0.0,
-                 seed=None) -> LLMResponse:
+    def complete(
+        self,
+        messages: list[LLMMessage],
+        *,
+        system: str | None = None,
+        max_tokens: int = 1024,
+        temperature: float = 0.0,
+        seed: int | None = None,
+    ) -> LLMResponse:
         start = time.monotonic()
-        response = self._wrapped.complete(messages, system=system,
-                                          max_tokens=max_tokens, temperature=temperature, seed=seed)
+        response = self._wrapped.complete(
+            messages, system=system, max_tokens=max_tokens, temperature=temperature, seed=seed
+        )
         self._stats.record(response, time.monotonic() - start)
         return response
