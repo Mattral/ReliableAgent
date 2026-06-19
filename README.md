@@ -4,16 +4,18 @@ A reliability-first orchestration framework for building agentic systems
 that don't just *work in the demo* — they fail safely, explain themselves,
 and recover.
 
-> **Scope of this build.** This repository implements **Phase 0 (Foundations)
-> and Phase 1 (Core Orchestration)** of the full ReliableAgent roadmap, to a
-> production-shape standard: real typed contracts, a working
+> **Scope of this build.** This repository implements **Phase 0
+> (Foundations), Phase 1 (Core Orchestration), and Phase 2 (Evaluation
+> Harness & Reliability Measurement)** of the full ReliableAgent roadmap,
+> to a production-shape standard: real typed contracts, a working
 > plan → execute → critique → replan control loop, guardrails enforced at
-> every architectural boundary, checkpoint/resume, and a passing test suite
-> (76 tests, unit + integration). Phases 2–4 (the full Evaluation Harness,
-> advanced guardrail backends, multi-agent coordination, and the plugin
-> ecosystem) are intentionally out of scope for this delivery — see
-> [`docs/roadmap_status.md`](docs/roadmap_status.md) for exactly what's done,
-> what's stubbed, and what's not started.
+> every architectural boundary, checkpoint/resume, a curated 20-task
+> golden suite with the five required reliability metrics, a
+> configuration-comparison tool, and a passing test suite (140 tests,
+> unit + integration + evaluation). Phases 3–4 (multi-agent coordination,
+> the plugin ecosystem) are intentionally out of scope for this delivery
+> — see [`docs/roadmap_status.md`](docs/roadmap_status.md) for exactly
+> what's done, what's stubbed, and what's not started.
 
 ## Why this exists
 
@@ -43,6 +45,8 @@ pip install -e ".[dev]"          # editable install + dev tooling
 python scripts/run_tests.py      # run the test suite (uses real pytest if
                                   # installed, else a bundled offline runner)
 python examples/quickstart.py    # a runnable, narrated walkthrough
+python examples/run_evaluation.py            # one-command evaluation: metrics + failure analysis
+python examples/compare_configurations.py    # quantitative before/after comparison across configs
 ```
 
 ```python
@@ -109,6 +113,44 @@ every module and the design decisions behind it, and
 [`adr/`](adr) for the specific tradeoffs that were deliberated, not just
 assumed.
 
+## Measuring reliability, not just claiming it
+
+Phase 2 adds a curated suite of 20 "golden tasks" spanning 5 categories
+(arithmetic, fact lookup, failure recovery, guardrail enforcement, text
+processing), each with a known-correct outcome and grader. Running it
+computes five metrics:
+
+```
+$ python examples/run_evaluation.py
+Task Success Rate:           100.0% (20/20)
+Recovery Rate:                100.0%
+Average Replanning Attempts:  0.30
+Guardrail Intervention Rate:  15.0%
+By category:
+  - arithmetic: success=100.0% (4/4), avg_replans=0.25
+  - failure_recovery: success=100.0% (4/4), avg_replans=1.00
+  ...
+```
+
+And `examples/compare_configurations.py` runs the same suite under several
+named configurations (guardrail strictness, Critic strategy, executor
+retry settings) side by side, so a claim like "stricter guardrails improve
+reliability" is a number, not an assertion:
+
+```
+Variant                        Success    Recovery   AvgReplans  GuardrailInt.
+--------------------------------------------------------------------------------
+guardrails_lenient              90.0%       85.7%         0.30          5.0%
+guardrails_standard            100.0%      100.0%         0.30         15.0%
+```
+
+The suite runs entirely offline against `MockLLMClient` by default (so
+it's free, fast, and a genuine regression test of the orchestration
+engine itself); pass `--use-real-anthropic-model` to run the identical
+tasks and graders against a live model instead. See
+[`adr/0004-golden-task-suite-design.md`](adr/0004-golden-task-suite-design.md)
+for why it's built this way, including two real bugs this design caught.
+
 ## Project layout
 
 ```
@@ -127,12 +169,20 @@ src/reliableagent/
                     (real on-disk checkpoint/trajectory persistence).
   observability/    Event model, pluggable sinks (in-memory/console/JSONL),
                     and the Tracer every component emits through.
+  evaluation/       Phase 2: the curated 20-task golden suite, EvaluationRunner
+                    (seed control + trajectory persistence), the 5 reliability
+                    metrics, failure analysis reports, and the configuration
+                    comparison tool (guardrail strictness / Critic strategy /
+                    executor retries).
   exceptions/       The full exception hierarchy (recoverable vs not).
   _compat/          See "A note on the dependency situation" below.
 tests/
-  unit/             Fast, isolated tests per component (66 tests).
+  unit/             Fast, isolated tests per component (76 tests).
   integration/      Full Orchestrator runs against real components,
-                    LLM-mocked only (10 tests).
+                    LLM-mocked only (8 tests).
+  eval/             Phase 2 tests: metrics math, the golden suite running
+                    against the real Orchestrator, configuration comparison,
+                    and failure analysis (56 tests).
 examples/           Runnable, narrated example scripts.
 adr/                Architecture Decision Records for the non-obvious calls.
 docs/                Architecture deep-dive + exact roadmap completion status.
@@ -167,14 +217,15 @@ changes to run under real pytest.
 
 See [`docs/roadmap_status.md`](docs/roadmap_status.md) for the full,
 itemized comparison against every requirement in the original roadmap.
-Briefly: the Phase 2 Evaluation Harness (golden-task regression suite,
-automated failure-mode classification, dashboards), advanced
-guardrail backends (PII detection, jailbreak classifiers), multi-agent
-coordination (Phase 3), and the plugin/distribution ecosystem (Phase 4) are
-not implemented. The architecture is designed so they can be added as new
-modules without breaking the existing P0/P1 contracts — e.g. a new
-`Guardrail` subclass or `Planner` subclass plugs in without touching the
-`Orchestrator`.
+Briefly: advanced guardrail backends (ML-based PII detection, jailbreak
+classifiers — Phase 3's "Enhanced Guardrail strategies"), a stronger
+Critic with process supervision (Phase 3), multi-agent coordination, and
+the plugin/distribution ecosystem (Phase 4) are not implemented. The
+architecture is designed so they can be added as new modules without
+breaking the existing P0/P1/P2 contracts — e.g. a new `Guardrail`
+subclass or `Planner` subclass plugs in without touching the
+`Orchestrator`, and a new golden task category plugs into the existing
+`EvaluationRunner`/metrics pipeline without changes to either.
 
 ## License
 
