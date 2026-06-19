@@ -184,3 +184,40 @@ covered — is documented in detail in
 This is flagged here, prominently, rather than left for a reader to
 discover by accident, because a fallback like this is exactly the kind of
 thing that should be impossible to miss in a project's documentation.
+
+## 9. The Evaluation Harness: metrics as pure functions over graded runs
+
+`evaluation/metrics.py`'s `compute_metrics` takes a `list[GradedRun]` and
+returns a `MetricsReport` — a pure function with no dependency on how
+those `GradedRun`s were produced. This is why `tests/eval/test_metrics.py`
+can verify the exact arithmetic of all five metrics (Task Success Rate,
+Recovery Rate, Average Replanning Attempts, Guardrail Intervention Rate,
+Failure Category Distribution) against small, hand-built fixtures, with
+zero Orchestrator/Planner/LLM involvement, while `tests/eval/test_golden_
+suite.py` separately verifies the *real* `Orchestrator` produces the
+right `GradedRun`s in the first place. A metrics bug and an orchestration
+bug can never be confused with each other, because they're tested in
+complete isolation from one another.
+
+The two-question split this enables is deliberate: "is a run's outcome
+correctly graded" (the `GoldenTask.grade` function, tested in `test_
+golden_task.py`) is a different concern from "given a batch of already-
+graded outcomes, what do the aggregate numbers say" (`compute_metrics`,
+tested in `test_metrics.py`), and conflating them into one "run the suite
+and print some numbers" script would have made both harder to verify
+independently — and would have hidden the `failure_category_distribution`
+bug described in `adr/0004` for much longer, since the bug was specifically
+in the boundary between "what the Orchestrator did" and "what the grader
+decided," which only became visible once those two questions had separate,
+explicit data structures (`RunResult.failure_category` vs.
+`GradedRun.passed`) to be tested against independently.
+
+Every golden task doubles as a `MockLLMClient` script AND a real-model-
+ready task definition (see `adr/0004` for the full rationale and the two
+concrete bugs this design caught during development). The practical
+consequence: `examples/run_evaluation.py --use-real-anthropic-model
+claude-sonnet-4-6` and the default offline mode differ by exactly one
+constructor call (`llm_client_builder`, threaded through `evaluation/
+factory.py::build_standard_factory`) — nothing about the golden tasks,
+graders, metrics, or comparison tool needs to know or care which LLM
+backend actually produced a given run's plan.
