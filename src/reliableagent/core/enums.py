@@ -116,6 +116,7 @@ class EventType(str, Enum):
     PLAN_GENERATED = "plan_generated"
     STEP_STARTED = "step_started"
     STEP_COMPLETED = "step_completed"
+    STEP_CRITIQUED = "step_critiqued"
     TOOL_CALL_STARTED = "tool_call_started"
     TOOL_CALL_COMPLETED = "tool_call_completed"
     GUARDRAIL_EVALUATED = "guardrail_evaluated"

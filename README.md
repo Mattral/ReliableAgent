@@ -5,17 +5,20 @@ that don't just *work in the demo* — they fail safely, explain themselves,
 and recover.
 
 > **Scope of this build.** This repository implements **Phase 0
-> (Foundations), Phase 1 (Core Orchestration), and Phase 2 (Evaluation
-> Harness & Reliability Measurement)** of the full ReliableAgent roadmap,
+> (Foundations), Phase 1 (Core Orchestration), Phase 2 (Evaluation
+> Harness & Reliability Measurement), and Phase 3 (Advanced Reliability
+> Features: process-supervision Critic, strategy-driven Replanner,
+> policy/output-filtering Guardrails)** of the full ReliableAgent roadmap,
 > to a production-shape standard: real typed contracts, a working
 > plan → execute → critique → replan control loop, guardrails enforced at
 > every architectural boundary, checkpoint/resume, a curated 20-task
 > golden suite with the five required reliability metrics, a
-> configuration-comparison tool, and a passing test suite (140 tests,
-> unit + integration + evaluation). Phases 3–4 (multi-agent coordination,
-> the plugin ecosystem) are intentionally out of scope for this delivery
-> — see [`docs/roadmap_status.md`](docs/roadmap_status.md) for exactly
-> what's done, what's stubbed, and what's not started.
+> configuration-comparison tool, multi-criteria + step-level Critic
+> supervision, failure-type-aware replanning, and a passing test suite
+> (207 tests, unit + integration + evaluation). Phase 4 (the plugin
+> ecosystem) is intentionally out of scope for this delivery — see
+> [`docs/roadmap_status.md`](docs/roadmap_status.md) for exactly what's
+> done, what's stubbed, and what's not started.
 
 ## Why this exists
 
@@ -45,6 +48,7 @@ pip install -e ".[dev]"          # editable install + dev tooling
 python scripts/run_tests.py      # run the test suite (uses real pytest if
                                   # installed, else a bundled offline runner)
 python examples/quickstart.py    # a runnable, narrated walkthrough
+python examples/advanced_reliability.py      # Phase 3: process supervision, replanning, guardrails
 python examples/run_evaluation.py            # one-command evaluation: metrics + failure analysis
 python examples/compare_configurations.py    # quantitative before/after comparison across configs
 ```
@@ -151,6 +155,32 @@ tasks and graders against a live model instead. See
 [`adr/0004-golden-task-suite-design.md`](adr/0004-golden-task-suite-design.md)
 for why it's built this way, including two real bugs this design caught.
 
+## Going beyond pass/fail: process supervision, smarter replanning, redaction
+
+Phase 3 adds three things to the core loop, all enabled by default
+(nothing here is an opt-in a caller has to discover):
+
+- **Process-supervision Critics** (`DeterministicProcessCritic`,
+  `LLMProcessCritic`) score every plan on three separate criteria —
+  correctness, efficiency, safety — instead of one blended number, and
+  flag individual steps as they happen, not just at the end of a plan.
+- **A strategy-driven `Replanner`** classifies *why* a replan is needed
+  (a tool kept failing vs. progress just stalled vs. budget is nearly
+  exhausted) and shapes a different, concretely actionable hint for each
+  case — including deliberately shrinking the next plan's ambition once
+  few replan attempts remain.
+- **`PolicyGuardrail`** (structured, named, scoped rules — block or
+  redact) and **`OutputFilterGuardrail`** (built-in regex-based PII
+  redaction for emails, phone numbers, SSNs, and card numbers) extend the
+  guardrail layer beyond Phase 0/1's substring matching.
+
+Building this phase surfaced two real, pre-existing bugs in the
+Orchestrator — a guardrail's redaction was being computed and logged but
+never actually applied to what a run returns, and successful runs were
+silently skipping the Critic entirely. Both are fixed and regression-
+tested; full story in
+[`adr/0005-phase3-critic-replanner-guardrails.md`](adr/0005-phase3-critic-replanner-guardrails.md).
+
 ## Project layout
 
 ```
@@ -160,11 +190,16 @@ src/reliableagent/
   llm/              Provider-agnostic LLMClient protocol + MockLLMClient
                     (deterministic, offline) + AnthropicLLMClient (real).
   planner/          Planner ABC, LLMPlanner, Critic ABC, ThresholdCritic,
-                    LLMCritic, and shared prompt-construction helpers.
+                    LLMCritic, DeterministicProcessCritic/LLMProcessCritic
+                    (Phase 3 process supervision), Replanner + ReplanStrategy
+                    implementations (Phase 3 failure-aware replanning), and
+                    shared prompt-construction helpers.
   executor/         ToolRegistry (schema-validated tool registration) and
                     Executor (timeouts, retries, structured error capture).
   guardrails/       Guardrail ABC, BasicGuardrail + 2 focused guardrails,
-                    and the GuardrailRunner that chains them per-boundary.
+                    PolicyGuardrail (Phase 3: structured rule-based policy),
+                    OutputFilterGuardrail (Phase 3: PII redaction), and the
+                    GuardrailRunner that chains them per-boundary.
   memory/           MemoryBackend protocol, InMemoryBackend, FileMemoryBackend
                     (real on-disk checkpoint/trajectory persistence).
   observability/    Event model, pluggable sinks (in-memory/console/JSONL),
@@ -177,9 +212,9 @@ src/reliableagent/
   exceptions/       The full exception hierarchy (recoverable vs not).
   _compat/          See "A note on the dependency situation" below.
 tests/
-  unit/             Fast, isolated tests per component (76 tests).
+  unit/             Fast, isolated tests per component (135 tests).
   integration/      Full Orchestrator runs against real components,
-                    LLM-mocked only (8 tests).
+                    LLM-mocked only (16 tests).
   eval/             Phase 2 tests: metrics math, the golden suite running
                     against the real Orchestrator, configuration comparison,
                     and failure analysis (56 tests).
@@ -217,15 +252,14 @@ changes to run under real pytest.
 
 See [`docs/roadmap_status.md`](docs/roadmap_status.md) for the full,
 itemized comparison against every requirement in the original roadmap.
-Briefly: advanced guardrail backends (ML-based PII detection, jailbreak
-classifiers — Phase 3's "Enhanced Guardrail strategies"), a stronger
-Critic with process supervision (Phase 3), multi-agent coordination, and
-the plugin/distribution ecosystem (Phase 4) are not implemented. The
-architecture is designed so they can be added as new modules without
-breaking the existing P0/P1/P2 contracts — e.g. a new `Guardrail`
-subclass or `Planner` subclass plugs in without touching the
-`Orchestrator`, and a new golden task category plugs into the existing
-`EvaluationRunner`/metrics pipeline without changes to either.
+Briefly: multi-agent coordination and the plugin/distribution ecosystem
+(Phase 4) are not implemented. `OutputFilterGuardrail`'s PII detection is
+regex-based, not an ML classifier — documented honestly as a known
+limitation, not oversold. The architecture is designed so Phase 4 can be
+added as new modules without breaking the existing P0/P1/P2/P3
+contracts — e.g. a new `Guardrail` subclass or `Planner` subclass plugs
+in without touching the `Orchestrator`, and a new `ReplanStrategy` plugs
+into the existing `Replanner` without changes to either.
 
 ## License
 

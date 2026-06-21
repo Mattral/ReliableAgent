@@ -220,15 +220,86 @@ class GuardrailDecision(_BaseFrozenModel):
 
 
 # ---------------------------------------------------------------------------
-# Critic feedback
+# Critic feedback (Phase 3: multi-criteria scoring + step-level supervision)
 # ---------------------------------------------------------------------------
+
+
+class CriterionScores(_BaseFrozenModel):
+    """Multi-criteria breakdown of a single quality assessment.
+
+    Per Phase 3's "stronger Critic with process supervision": a single
+    scalar `quality_score` collapses three genuinely different questions
+    into one number — "did this work," "was it wasteful," and "was it
+    safe" can disagree (a plan can be perfectly correct and safe while
+    burning twice the necessary steps, or efficient and correct while
+    skating close to a policy boundary). Keeping them as separate scores
+    lets a Critic (and anyone reading a `Trajectory` later) see *which*
+    dimension is actually driving a low overall score, rather than just
+    that something, somewhere, wasn't great.
+
+    `overall` is derived (see `weighted_overall`), not independently
+    settable, so it can never silently drift out of sync with the three
+    inputs it's computed from.
+    """
+
+    correctness: float = Field(..., ge=0.0, le=1.0, description="Did this achieve what it should have?")
+    efficiency: float = Field(
+        ..., ge=0.0, le=1.0, description="Was it accomplished without excess steps/waste?"
+    )
+    safety: float = Field(
+        ..., ge=0.0, le=1.0, description="Did it stay clear of policy/safety concerns?"
+    )
+
+    def weighted_overall(
+        self, *, correctness_weight: float = 0.6, efficiency_weight: float = 0.2, safety_weight: float = 0.2
+    ) -> float:
+        """Combine the three criteria into a single score, correctness-weighted by default.
+
+        Correctness dominates by default because an efficient, safe plan
+        that doesn't actually accomplish the task is not a good outcome
+        by any reasonable standard — but the weights are parameters, not
+        constants, specifically so a caller can rebalance them (e.g. for
+        a safety-critical deployment that wants `safety` to dominate)
+        without needing a different model or a new Critic subclass.
+        """
+        total_weight = correctness_weight + efficiency_weight + safety_weight
+        if total_weight <= 0:
+            raise ValueError("Criterion weights must sum to a positive number.")
+        weighted_sum = (
+            self.correctness * correctness_weight
+            + self.efficiency * efficiency_weight
+            + self.safety * safety_weight
+        )
+        return weighted_sum / total_weight
+
+
+class StepCritique(_BaseFrozenModel):
+    """A Critic's per-step verdict, produced as each step completes.
+
+    This is what makes Critic supervision "process supervision" rather
+    than purely "outcome supervision": a step can be flagged as
+    problematic (`verdict=False`) the moment it happens, with a specific
+    `concern`, rather than that information only surfacing implicitly
+    much later as part of an aggregate end-of-plan `quality_score`.
+    """
+
+    step_id: str
+    verdict: bool = Field(..., description="Whether this step, taken alone, looks acceptable.")
+    concern: str = Field(default="", description="Specific issue noticed, if verdict is False.")
+    created_at: datetime = Field(default_factory=_utcnow)
 
 
 class Feedback(_BaseFrozenModel):
     """Structured feedback produced by the Critic after evaluating a trajectory.
 
     `should_replan` is the explicit signal consumed by the Orchestrator
-    to decide whether to transition into REPLANNING.
+    to decide whether to transition into REPLANNING. `criterion_scores`
+    and `step_critiques` are optional (default to `None`/empty) so every
+    existing Critic implementation and every existing test written
+    against the simpler Phase 0-2 `Feedback` shape continues to work
+    unchanged — Phase 3's process-supervision Critics populate them;
+    `ThresholdCritic` deliberately still does not, since a pure
+    failure-rate heuristic has no real multi-criteria basis to report.
     """
 
     feedback_id: str = Field(default_factory=lambda: _new_id("fb"))
@@ -237,6 +308,12 @@ class Feedback(_BaseFrozenModel):
     should_replan: bool
     issues: list[str] = Field(default_factory=list)
     rationale: str = Field(default="")
+    criterion_scores: CriterionScores | None = Field(
+        default=None, description="Multi-criteria breakdown, when the Critic strategy supports it."
+    )
+    step_critiques: list[StepCritique] = Field(
+        default_factory=list, description="Per-step verdicts, for Critics doing process supervision."
+    )
     created_at: datetime = Field(default_factory=_utcnow)
 
 
@@ -280,6 +357,9 @@ class StepRecord(_BaseFrozenModel):
     tool_call: ToolCall | None = None
     tool_result: ToolResult | None = None
     guardrail_decisions: list[GuardrailDecision] = Field(default_factory=list)
+    step_critique: StepCritique | None = Field(
+        default=None, description="The Critic's per-step verdict, when process supervision is enabled."
+    )
     started_at: datetime = Field(default_factory=_utcnow)
     completed_at: datetime | None = None
 

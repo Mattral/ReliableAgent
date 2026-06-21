@@ -74,6 +74,7 @@ from reliableagent.observability.sinks import InMemorySink
 from reliableagent.observability.tracer import Tracer
 from reliableagent.planner.base import Planner
 from reliableagent.planner.critic import Critic
+from reliableagent.planner.replanner import Replanner
 
 
 class Orchestrator:
@@ -106,6 +107,7 @@ class Orchestrator:
         executor: Executor | None = None,
         sink=None,
         checkpoint_every_step: bool = True,
+        replanner: Replanner | None = None,
     ) -> None:
         self._planner = planner
         self._critic = critic
@@ -115,6 +117,12 @@ class Orchestrator:
         self._sink = sink or InMemorySink()
         self._executor = executor or Executor(tools)
         self._checkpoint_every_step = checkpoint_every_step
+        # Defaulting to a real Replanner (rather than calling
+        # `planner.plan(...)` directly) means every Orchestrator gets
+        # failure-type-aware, budget-aware replanning out of the box --
+        # Phase 3's "more sophisticated Replanner" is the default
+        # behavior, not an opt-in a caller has to discover and enable.
+        self._replanner = replanner or Replanner(planner)
 
     # ------------------------------------------------------------------
     # Public API
@@ -237,6 +245,17 @@ class Orchestrator:
         state_machine: StateMachine,
     ) -> None:
         self._transition(state_machine, tracer, OrchestratorState.PLANNING)
+        # Note: the returned (possibly-redacted) payload from _guard() is
+        # intentionally not threaded back into `task.description` here.
+        # `task` is an immutable Task the caller owns; redacting its
+        # description would require constructing a new Task via
+        # model_copy and is not needed by anything currently shipped in
+        # this guardrail layer (BLOCK-style rules at this boundary don't
+        # need a modified payload at all; MODIFY-style PII redaction is
+        # intended for FINAL_OUTPUT, where the redacted payload IS
+        # correctly threaded through -- see below). If a future
+        # MODIFY-producing guardrail needs to redact planner input, this
+        # is the place to revisit.
         self._guard(GuardrailBoundary.PLANNER_INPUT, task.description, trajectory, tracer)
 
         plan = self._planner.plan(task, self._tools)
@@ -286,8 +305,22 @@ class Orchestrator:
 
                 if step.step_type == StepType.FINAL_ANSWER:
                     final_text = step.description
-                    self._guard(GuardrailBoundary.FINAL_OUTPUT, final_text, trajectory, tracer)
+                    final_text = self._guard(GuardrailBoundary.FINAL_OUTPUT, final_text, trajectory, tracer)
                     trajectory.final_answer = final_text
+                    # Record a final critique purely for observability/
+                    # trajectory completeness, even on this success path --
+                    # without this, `Trajectory.feedbacks` would only ever
+                    # be populated on the (less common) "plan exhausted
+                    # without an explicit final_answer" fallback below,
+                    # leaving every ordinary successful run with NO
+                    # multi-criteria quality record at all. Its
+                    # `should_replan` is irrelevant here (the run is
+                    # already complete) and is deliberately ignored.
+                    final_feedback = self._critic.critique(task, current_plan, results)
+                    trajectory.add_feedback(final_feedback)
+                    tracer.emit_critique_generated(
+                        final_feedback.quality_score, final_feedback.should_replan
+                    )
                     self._transition(state_machine, tracer, OrchestratorState.COMPLETED)
                     self._checkpoint(
                         task, current_plan, results, trajectory, tracer, replan_count, step_count
@@ -302,7 +335,7 @@ class Orchestrator:
 
             if not feedback.should_replan:
                 final_text = self._derive_fallback_answer(results)
-                self._guard(GuardrailBoundary.FINAL_OUTPUT, final_text, trajectory, tracer)
+                final_text = self._guard(GuardrailBoundary.FINAL_OUTPUT, final_text, trajectory, tracer)
                 trajectory.final_answer = final_text
                 self._transition(state_machine, tracer, OrchestratorState.COMPLETED)
                 self._checkpoint(
@@ -321,12 +354,13 @@ class Orchestrator:
             tracer.emit_replan_triggered(replan_count, feedback.rationale)
             self._guard(GuardrailBoundary.PLANNER_INPUT, task.description, trajectory, tracer)
 
-            current_plan = self._planner.plan(
+            current_plan = self._replanner.replan(
                 task,
                 self._tools,
                 prior_results=results,
+                feedback=feedback,
                 replan_attempt=replan_count,
-                feedback_reason=feedback.rationale,
+                max_replans=task.max_replans,
             )
             trajectory.add_plan(current_plan)
             tracer.emit_plan_generated(current_plan)
@@ -383,12 +417,17 @@ class Orchestrator:
             tracer.emit_guardrail_evaluated(decision)
 
         status = StepStatus.SUCCEEDED if result.success else StepStatus.FAILED
+        step_critique = self._critic.critique_step(step, result)
+        if step_critique is not None:
+            tracer.emit_step_critiqued(step_critique)
+
         record = StepRecord(
             step=step,
             status=status,
             tool_call=call,
             tool_result=result,
             guardrail_decisions=guard_result.decisions + output_guard.decisions,
+            step_critique=step_critique,
         )
         trajectory.add_step_record(record)
         tracer.emit_step_completed(step, status.value)
@@ -400,8 +439,16 @@ class Orchestrator:
 
     def _guard(
         self, boundary: GuardrailBoundary, payload, trajectory: Trajectory, tracer: Tracer
-    ) -> None:
-        """Run guardrails at a run-level boundary (planner input/output, final output)."""
+    ):
+        """Run guardrails at a run-level boundary (planner input/output, final output).
+
+        Returns the (possibly MODIFY-redacted) payload. Callers MUST use
+        the returned value, not the original `payload` they passed in --
+        discarding it here would mean a guardrail's MODIFY verdict (e.g.
+        `OutputFilterGuardrail` redacting PII) is computed and logged in
+        the `Trajectory` but never actually applied to what the run
+        returns, silently defeating the guardrail's entire purpose.
+        """
         result = self._guardrail_runner.run(boundary, payload)
         for decision in result.decisions:
             trajectory.add_guardrail_decision(decision)
@@ -412,6 +459,7 @@ class Orchestrator:
                 guardrail_name=result.blocking_decision.guardrail_name,
                 boundary=boundary.value,
             )
+        return result.final_payload
 
     def _transition(
         self, state_machine: StateMachine, tracer: Tracer, to_state: OrchestratorState
