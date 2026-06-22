@@ -65,6 +65,28 @@ from typing import Any, ClassVar, Union, get_args, get_origin, get_type_hints
 
 _MISSING = object()
 
+# Per-class cache for `get_type_hints(cls)` results. Resolving type hints
+# (especially with `from __future__ import annotations`, which is used
+# throughout this codebase, turning every annotation into a string that
+# must be eval'd) is genuinely expensive -- profiling a real run with
+# `examples/profile_performance.py` showed `get_type_hints` as the single
+# most expensive operation in the entire request path once LLM-call
+# latency is removed from the picture (see `docs/architecture.md`
+# section 11 and `adr/0006`). A class's annotations never change after
+# it's defined, so resolving them once per class and reusing the result
+# for every subsequent instantiation is both correct and a meaningful
+# real-world speedup -- this is the single most impactful change found
+# during Phase 4's profiling pass.
+_type_hints_cache: dict[type, dict[str, Any]] = {}
+
+
+def _cached_type_hints(cls: type) -> dict[str, Any]:
+    cached = _type_hints_cache.get(cls)
+    if cached is None:
+        cached = get_type_hints(cls)
+        _type_hints_cache[cls] = cached
+    return cached
+
 
 class ConfigDict(dict):
     """Passthrough stand-in for pydantic.ConfigDict (just a typed dict)."""
@@ -254,7 +276,7 @@ class BaseModel:
 
     def __init__(self, **data: Any) -> None:
         cls = type(self)
-        hints = get_type_hints(cls)
+        hints = _cached_type_hints(cls)
         field_infos: dict[str, FieldInfo] = getattr(cls, "__field_infos__", {})
         plain_defaults: dict[str, Any] = getattr(cls, "__plain_defaults__", {})
         extra_mode = cls.model_config.get("extra", "ignore")
@@ -322,7 +344,7 @@ class BaseModel:
 
     def __repr__(self) -> str:
         cls = type(self)
-        hints = get_type_hints(cls)
+        hints = _cached_type_hints(cls)
         fields_repr = ", ".join(
             f"{name}={getattr(self, name)!r}" for name in hints if name != "model_config"
         )
@@ -331,14 +353,14 @@ class BaseModel:
     def __eq__(self, other: object) -> bool:
         if type(self) is not type(other):
             return NotImplemented
-        hints = get_type_hints(type(self))
+        hints = _cached_type_hints(type(self))
         return all(
             getattr(self, n) == getattr(other, n) for n in hints if n != "model_config"
         )
 
     def model_dump(self, *, mode: str = "python") -> dict[str, Any]:
         """Serialize the model into a plain dict (recursively)."""
-        hints = get_type_hints(type(self))
+        hints = _cached_type_hints(type(self))
         out: dict[str, Any] = {}
         for name in hints:
             if name == "model_config":
