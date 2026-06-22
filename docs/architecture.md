@@ -268,3 +268,83 @@ Orchestrator's loop, and is treated with corresponding care: documented
 as a named, numbered bug in `adr/0005`, not folded silently into "Phase 3
 adds process supervision" framing where a reader could easily miss that
 it affects every Critic, including ones written before this phase existed.
+
+## 11. Performance characteristics: what's fast, what's not, and why
+
+Per Phase 4's "Performance profiling" deliverable,
+`examples/profile_performance.py` profiles the full 20-task golden suite
+with stdlib `cProfile` and attributes time to architectural layers. Two
+honest framing points before the numbers themselves:
+
+1. **Every number here is measured against `MockLLMClient`**, which has
+   effectively zero latency. In any real deployment with a real LLM
+   provider, network round-trip time to that provider will dominate
+   total wall-clock time by one or two orders of magnitude over
+   everything discussed below — these numbers describe ReliableAgent's
+   *own* overhead, which is the thing actually under this project's
+   control, not "how fast is an agent run" in any end-to-end sense.
+2. **The golden suite's own design includes deliberate waiting** — the
+   Executor's retry-backoff `time.sleep()`, triggered by the suite's
+   intentional-failure tasks (`always_fails`, `flaky_lookup`). The
+   profiler labels this time explicitly as "Deliberate waiting" rather
+   than folding it into generic overhead, and `--no-retry-backoff`
+   excludes it entirely for a cleaner view of pure computational cost.
+
+With both of those accounted for, profiling surfaced one genuinely
+significant, fixable finding: `typing.get_type_hints()`, called inside
+`reliableagent._compat._fallback.BaseModel`'s `__init__`/`model_dump`/
+`__repr__`/`__eq__`, was being re-resolved from scratch on *every single
+model construction or inspection* rather than once per class. Caching it
+per-class (`adr/0006`) measured a **4.85x speedup** for bare model
+construction in an isolated microbenchmark, and roughly a **3.1x**
+reduction in total wall-clock time for the full golden-suite profile
+(excluding deliberate waiting). This is the single most impactful change
+to come out of this delivery's profiling pass, and is the kind of finding
+profiling is specifically good at surfacing that code review alone
+typically would not: the original code was correct, well-documented, and
+passed every test — its cost was invisible without actually measuring it.
+
+### Complexity of the hot paths, by component
+
+These are intentionally simple, worst-case-style observations about the
+*shape* of the cost (how it scales with inputs), as a complement to the
+profiler's *measured* numbers above — useful for reasoning about scaling
+behavior the profiler's one fixed 20-task suite can't directly show.
+
+- **`Orchestrator._execute_and_continue`**: `O(steps × (guardrail_count +
+  tool_cost))` per plan, where `steps` is that plan's step count and
+  `guardrail_count` is the number of registered guardrails. Replanning
+  multiplies this by `replan_attempts`, bounded by `Task.max_replans`.
+  There is no hidden quadratic behavior here: `results` (the accumulated
+  `ToolResult` list passed to the Critic) grows linearly with total steps
+  across the whole run, and is only ever appended to or iterated once per
+  critique call, never re-scanned per-step.
+- **`GuardrailRunner.run`**: `O(guardrails_at_this_boundary)`, with an
+  early exit on the first BLOCK — a guardrail stack with many guardrails
+  that mostly ALLOW pays the full linear cost on every call; a stack
+  where an early guardrail frequently BLOCKs pays less in practice than
+  the worst case suggests. `PolicyGuardrail` itself is
+  `O(rules × text_length)` per check (one regex search per rule, each
+  `O(text_length)` for a non-pathological pattern) — a deliberately
+  simple cost model, not a rules-engine with its own scaling surprises.
+- **`Executor.execute`**: `O(1)` plus the tool's own cost; the
+  thread-pool submission/`future.result(timeout=...)` machinery is
+  constant-overhead regardless of what the tool itself does. Retries
+  multiply wall-clock time (not CPU time) by `1 + max_retries`, plus
+  `Σ(retry_backoff_seconds × attempt)` of genuinely-intentional sleeping.
+- **`FileMemoryBackend.load_latest_checkpoint`**: `O(checkpoints_in_run)`
+  — a directory glob + lexicographic sort over that run's checkpoint
+  files, not a scan of every run ever persisted, since checkpoints are
+  namespaced by `run_id` into their own subdirectory.
+- **`compute_metrics`** (`evaluation/metrics.py`): a single `O(n)` pass
+  over the input `GradedRun` list per metric, computed independently per
+  metric rather than one fused pass — a deliberate clarity-over-
+  micro-optimization choice, since `n` here is bounded by the size of an
+  evaluation suite (tens to low hundreds of runs in any realistic usage),
+  not a per-request hot path.
+
+None of the above identified a real scaling problem worth fixing in this
+delivery — the `get_type_hints` finding was a genuine, measured win;
+everything else here is `O(n)` or better in the inputs that actually
+matter at this project's current scale, and is recorded as a baseline
+for comparison if a future phase's profiling run finds otherwise.
