@@ -6,19 +6,21 @@ and recover.
 
 > **Scope of this build.** This repository implements **Phase 0
 > (Foundations), Phase 1 (Core Orchestration), Phase 2 (Evaluation
-> Harness & Reliability Measurement), and Phase 3 (Advanced Reliability
+> Harness & Reliability Measurement), Phase 3 (Advanced Reliability
 > Features: process-supervision Critic, strategy-driven Replanner,
-> policy/output-filtering Guardrails)** of the full ReliableAgent roadmap,
-> to a production-shape standard: real typed contracts, a working
+> policy/output-filtering Guardrails), and Phase 4 (Polish, Documentation
+> & Impact: performance profiling with a measured 4.85x fix, and this
+> documentation set itself)** of the full ReliableAgent roadmap, to a
+> production-shape standard: real typed contracts, a working
 > plan → execute → critique → replan control loop, guardrails enforced at
 > every architectural boundary, checkpoint/resume, a curated 20-task
 > golden suite with the five required reliability metrics, a
 > configuration-comparison tool, multi-criteria + step-level Critic
 > supervision, failure-type-aware replanning, and a passing test suite
-> (207 tests, unit + integration + evaluation). Phase 4 (the plugin
-> ecosystem) is intentionally out of scope for this delivery — see
-> [`docs/roadmap_status.md`](docs/roadmap_status.md) for exactly what's
-> done, what's stubbed, and what's not started.
+> (210 tests, unit + integration + evaluation). Multi-agent coordination
+> beyond what's described here is intentionally out of scope for this
+> delivery — see [`docs/roadmap_status.md`](docs/roadmap_status.md) for
+> exactly what's done, what's stubbed, and what's not started.
 
 ## Why this exists
 
@@ -51,6 +53,7 @@ python examples/quickstart.py    # a runnable, narrated walkthrough
 python examples/advanced_reliability.py      # Phase 3: process supervision, replanning, guardrails
 python examples/run_evaluation.py            # one-command evaluation: metrics + failure analysis
 python examples/compare_configurations.py    # quantitative before/after comparison across configs
+python examples/profile_performance.py --no-retry-backoff   # where does time actually go?
 ```
 
 ```python
@@ -181,6 +184,25 @@ silently skipping the Critic entirely. Both are fixed and regression-
 tested; full story in
 [`adr/0005-phase3-critic-replanner-guardrails.md`](adr/0005-phase3-critic-replanner-guardrails.md).
 
+## Performance: measured, not assumed
+
+`examples/profile_performance.py` profiles the full golden suite with
+stdlib `cProfile` and attributes time to architectural layers. It found
+one real, fixable bottleneck: the Pydantic-compatibility shim (see below)
+was re-resolving each class's type hints from scratch on every single
+model construction. Caching it per-class measured a **4.85x speedup** for
+bare model construction (isolated microbenchmark, 50,000 iterations) and
+roughly **3.1x** less total wall-clock time for the full suite. Full
+writeup, including the two alternatives considered and why caching per-
+class rather than eagerly was the right call, in
+[`adr/0006-type-hints-caching-performance-fix.md`](adr/0006-type-hints-caching-performance-fix.md);
+complexity/Big-O notes for every hot path in `docs/architecture.md`
+section 11.
+
+```bash
+python examples/profile_performance.py --no-retry-backoff --repeat 5
+```
+
 ## Project layout
 
 ```
@@ -212,7 +234,7 @@ src/reliableagent/
   exceptions/       The full exception hierarchy (recoverable vs not).
   _compat/          See "A note on the dependency situation" below.
 tests/
-  unit/             Fast, isolated tests per component (135 tests).
+  unit/             Fast, isolated tests per component (138 tests).
   integration/      Full Orchestrator runs against real components,
                     LLM-mocked only (16 tests).
   eval/             Phase 2 tests: metrics math, the golden suite running
