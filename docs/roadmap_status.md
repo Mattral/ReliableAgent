@@ -121,27 +121,45 @@ multi-criteria scoring.
    additional `Critic.critique()` call (free for heuristic Critics, one
    extra LLM call for `LLMCritic`/`LLMProcessCritic`).
 
-## Phase 4: not in scope for this delivery
+## Phase 4: Polish, Documentation & Impact (P2)
 
-The plugin/distribution ecosystem and multi-agent coordination (if and
-where the source roadmap specifies them beyond this document's visibility)
-were not attempted.
+Per your scoping decisions: the optional "Multiple Planner strategies"
+bullet was explicitly skipped (you judged `LLMPlanner` sufficient), and
+"Performance profiling" was built as both a runnable benchmark script AND
+written complexity notes.
+
+| Requirement | Status | Notes |
+|---|---|---|
+| Comprehensive documentation + examples | ✅ | `README.md`, `docs/architecture.md` (11 sections), `docs/roadmap_status.md` (this file), 6 ADRs, and `docs/portfolio_summary.md`. 5 runnable example scripts (`quickstart`, `advanced_reliability`, `run_evaluation`, `compare_configurations`, `profile_performance`), every one independently re-run and verified to produce real output during this delivery, not just written and assumed correct. |
+| Performance profiling | ✅ | `examples/profile_performance.py`: real stdlib `cProfile` over the full golden suite, with a component-level (Planner/Executor/Guardrails/Critic/Memory/Observability) time breakdown, not just a raw function list. Found and fixed a genuine bug (`adr/0006`): the Pydantic-compat shim was re-resolving `get_type_hints()` from scratch on every model construction. Caching it per-class measured a **4.85x speedup** in an isolated before/after microbenchmark (50,000 constructions) and ~3.1x less wall-clock time for the full suite. Complexity/Big-O notes for every hot path (`Orchestrator`, `GuardrailRunner`, `Executor`, `FileMemoryBackend`, `compute_metrics`) in `docs/architecture.md` section 11. |
+| Multiple Planner strategies (optional) | ⬜ | Explicitly skipped per your decision — marked optional in the source roadmap, and judged not worth the added surface area given `LLMPlanner`'s existing Plan-and-Execute strategy already covers this delivery's needs. `Planner` remains an ABC specifically so a second strategy (e.g. ReAct-style, interleaved one-step-at-a-time) could be added later without touching the Orchestrator. |
+| Strong final portfolio presentation materials | ✅ | `docs/portfolio_summary.md`: a one-page orientation document distinct from the README (which is reference documentation) — written for someone deciding whether to look closer, not for someone already using the library. |
+
+**One real performance bug found and fixed in this phase** (full detail
+in `adr/0006-type-hints-caching-performance-fix.md`): see the
+"Performance profiling" row above. Notably, this is a bug in
+infrastructure that existed since Phase 0 (the `_compat` shim from
+`adr/0001`) and had been passing all 207 tests the whole time — it was
+invisible without actually measuring it, which is itself the core
+argument for why "performance profiling" earns a place on this roadmap
+rather than being assumed-fine because the test suite is green.
 
 ## The most important caveat, stated plainly
 
-This delivery's **test suite (207 tests: 135 unit + 16 integration + 56
+This delivery's **test suite (210 tests: 138 unit + 16 integration + 56
 evaluation) genuinely runs and genuinely passes** — that was independently
 verified multiple times during development, including after every bug fix
 (two of which are documented in detail in `adr/0004`, two more in
-`adr/0005`, precisely because the suite caught them). What did **not** run
-even once, anywhere, in this delivery: `ruff`, `mypy`, `pytest` (the real
-package, as opposed to the offline shim runner built to substitute for
-it), `pre-commit`, the GitHub Actions CI workflow, and any real LLM
-provider. All of these are fully configured/supported and, based on
-careful manual review, expected to work — but "expected to work" and
-"verified to work" are different claims, and this document deliberately
-does not blur that line. If you have network access, the single most
-valuable next steps are:
+`adr/0005`, and a performance bug in `adr/0006`, precisely because the
+suite — and, for the performance bug, an isolated microbenchmark — caught
+them). What did **not** run even once, anywhere, in this delivery:
+`ruff`, `mypy`, `pytest` (the real package, as opposed to the offline
+shim runner built to substitute for it), `pre-commit`, the GitHub Actions
+CI workflow, and any real LLM provider. All of these are fully
+configured/supported and, based on careful manual review, expected to
+work — but "expected to work" and "verified to work" are different
+claims, and this document deliberately does not blur that line. If you
+have network access, the single most valuable next steps are:
 
 ```bash
 pip install -e ".[dev]"
