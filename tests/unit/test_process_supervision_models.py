@@ -41,7 +41,11 @@ def test_criterion_scores_rejects_non_positive_weight_sum():
 
 
 def test_criterion_scores_enforces_0_to_1_bounds():
-    with pytest.raises(Exception):
+    # Both real Pydantic's ValidationError and this project's compat
+    # shim's ValidationError inherit from ValueError, so asserting on
+    # ValueError (rather than a blind Exception) is both more precise
+    # and backend-agnostic.
+    with pytest.raises(ValueError):
         CriterionScores(correctness=1.5, efficiency=0.5, safety=0.5)
 
 
@@ -66,6 +70,7 @@ def test_feedback_accepts_criterion_scores_and_step_critiques():
         criterion_scores=scores,
         step_critiques=[critique],
     )
+    assert fb.criterion_scores is not None
     assert fb.criterion_scores.correctness == 0.9
     assert len(fb.step_critiques) == 1
     assert fb.step_critiques[0].concern == "too slow"

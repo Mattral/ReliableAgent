@@ -34,8 +34,13 @@ def test_task_has_sane_defaults():
 
 def test_task_is_frozen():
     task = Task(description="do something")
-    with pytest.raises(Exception):
-        task.description = "changed"
+    # This assignment is exactly what the test verifies is rejected --
+    # mypy (via the pydantic plugin) correctly flags it as a static
+    # error too, since a frozen model's fields are read-only by design.
+    # Both real Pydantic's ValidationError and this project's compat
+    # shim's ValidationError inherit from ValueError.
+    with pytest.raises(ValueError):
+        task.description = "changed"  # type: ignore[misc]
 
 
 def test_plan_step_requires_tool_name_for_tool_call():

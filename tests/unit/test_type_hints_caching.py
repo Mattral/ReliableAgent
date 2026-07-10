@@ -41,13 +41,21 @@ def test_cached_type_hints_resolves_each_class_at_most_once():
     # fresh first-call-then-cached sequence regardless of prior test order.
     _fallback._type_hints_cache.pop(Task, None)
 
-    original = _fallback.get_type_hints
-    _fallback.get_type_hints = counting_get_type_hints
+    # This test deliberately monkeypatches a module-level name for the
+    # duration of one test, to observe how many times the real
+    # `get_type_hints` gets called through the cache -- a legitimately
+    # dynamic pattern that a static type checker can't fully model
+    # (mypy's strict "no implicit re-export" check also doesn't consider
+    # `get_type_hints` an explicitly re-exported attribute of
+    # `_fallback`, since it's merely imported there from `typing`, not
+    # defined there). Both are expected here, not real type errors.
+    original = _fallback.get_type_hints  # type: ignore[attr-defined]
+    _fallback.get_type_hints = counting_get_type_hints  # type: ignore[attr-defined]
     try:
         for i in range(50):
             Task(description=f"instance {i}")
     finally:
-        _fallback.get_type_hints = original
+        _fallback.get_type_hints = original  # type: ignore[attr-defined]
 
     assert call_count["n"] == 1, (
         f"Expected get_type_hints to be called exactly once for 50 Task "

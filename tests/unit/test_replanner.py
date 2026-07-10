@@ -81,16 +81,16 @@ def test_classify_failure_with_zero_max_replans_never_triggers_budget_exhaustion
 
 
 def _context(**overrides):
-    defaults = dict(
-        task=Task(description="t"),
-        tools=_registry(),
-        prior_results=[],
-        feedback=Feedback(plan_id="p1", quality_score=0.5, should_replan=True, rationale="x"),
-        failure_type=FailureType.LOW_QUALITY_PROGRESS,
-        replan_attempt=1,
-        replans_remaining=2,
-        max_replans=3,
-    )
+    defaults = {
+        "task": Task(description="t"),
+        "tools": _registry(),
+        "prior_results": [],
+        "feedback": Feedback(plan_id="p1", quality_score=0.5, should_replan=True, rationale="x"),
+        "failure_type": FailureType.LOW_QUALITY_PROGRESS,
+        "replan_attempt": 1,
+        "replans_remaining": 2,
+        "max_replans": 3,
+    }
     defaults.update(overrides)
     return ReplanContext(**defaults)
 
@@ -197,7 +197,6 @@ def test_replanner_custom_strategies_override_defaults():
 
 
 def test_last_failure_type_does_not_call_the_planner():
-    registry = _registry()
     mock = MockLLMClient()
     planner = LLMPlanner(mock)
     replanner = Replanner(planner)

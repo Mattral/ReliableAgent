@@ -46,6 +46,7 @@ def test_critique_with_no_results_returns_perfect_scores():
     task = Task(description="t")
     plan = _make_plan(task)
     feedback = critic.critique(task, plan, [])
+    assert feedback.criterion_scores is not None
     assert feedback.criterion_scores.correctness == 1.0
     assert feedback.should_replan is False
 
@@ -59,6 +60,7 @@ def test_critique_correctness_reflects_failure_rate():
         ToolResult(call_id="c2", success=False, error="boom"),
     ]
     feedback = critic.critique(task, plan, results)
+    assert feedback.criterion_scores is not None
     assert feedback.criterion_scores.correctness == pytest.approx(0.5)
 
 
@@ -68,6 +70,7 @@ def test_critique_efficiency_reflects_expected_steps_baseline():
     plan = _make_plan(task)
     results = [ToolResult(call_id=f"c{i}", success=True, output="ok") for i in range(4)]
     feedback = critic.critique(task, plan, results)
+    assert feedback.criterion_scores is not None
     assert feedback.criterion_scores.efficiency == pytest.approx(0.5)
 
 
@@ -77,6 +80,7 @@ def test_critique_flags_safety_relevant_failures():
     plan = _make_plan(task)
     results = [ToolResult(call_id="c1", success=False, error="permission denied: unauthorized")]
     feedback = critic.critique(task, plan, results)
+    assert feedback.criterion_scores is not None
     assert feedback.criterion_scores.safety < 1.0
     assert feedback.should_replan is True
 
@@ -87,6 +91,7 @@ def test_critique_does_not_flag_ordinary_failures_as_safety_issues():
     plan = _make_plan(task)
     results = [ToolResult(call_id="c1", success=False, error="connection timed out")]
     feedback = critic.critique(task, plan, results)
+    assert feedback.criterion_scores is not None
     assert feedback.criterion_scores.safety == 1.0
 
 
@@ -109,6 +114,7 @@ def test_llm_process_critic_critique_step_parses_response():
     response = json.dumps({"verdict": False, "concern": "risky operation"})
     critic = LLMProcessCritic(MockLLMClient(responses=[response]))
     critique = critic.critique_step(step, result)
+    assert critique is not None
     assert critique.verdict is False
     assert critique.concern == "risky operation"
 
@@ -144,6 +150,7 @@ def test_llm_process_critic_critique_parses_multi_criteria_response():
     )
     critic = LLMProcessCritic(MockLLMClient(responses=[response]))
     feedback = critic.critique(task, plan, [])
+    assert feedback.criterion_scores is not None
     assert feedback.criterion_scores.correctness == 0.9
     assert feedback.criterion_scores.efficiency == 0.7
     assert feedback.should_replan is False
