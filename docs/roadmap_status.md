@@ -250,7 +250,55 @@ the one real Pydantic bug above), not a separate problem. Fixed by
 adding `fail-fast: false` to the workflow, so a single failing version
 no longer hides results from the others.
 
-## The most important caveat, stated plainly (updated after the first real CI run)
+## The second real CI run: `mypy .` (first time) and `ruff check` (again)
+
+The project owner ran `mypy .` for the first time in this project's
+history (351 errors) and `ruff check` a second time after the fixes
+above (204 errors, down from 225 — confirming the earlier ruleset
+narrowing genuinely helped). Full accounting in
+[`adr/0011`](adr/0011-second-real-ci-run-mypy-and-ruff-fixes.md); the
+short version:
+
+**One root cause explained the large majority of the 351 mypy errors**:
+`pyproject.toml`'s `packages = ["reliableagent"]` only scopes `strict =
+true` to the library when mypy is invoked bare — `mypy .` (a natural,
+common invocation) bypasses that scoping entirely and applies full
+strict mode, including `disallow_untyped_defs`, to every test/example/
+script file, none of which were ever meant to be held to the library's
+own bar. Fixed with explicit per-module overrides for `tests.*`,
+`scripts.*`, and `examples.*`, mirroring ruff's existing `ANN`
+exemptions for the same three directories — this alone resolved most of
+the 351 errors regardless of how mypy is invoked going forward.
+
+**Roughly 30 genuine bugs, not just missing annotations, were also
+found and fixed**, including: a tool-output validator typed as bare
+`object` (causing real "not callable" errors at every call site); a
+variable in an example script whose type was permanently inferred as
+`None` from its first assignment, then reassigned to a function later
+(also a real "not callable" bug); two real union-attr gaps in
+`orchestrator.py` itself around `GuardrailRunResult.blocking_decision`,
+fixed with invariant-documenting `assert`s rather than blind
+suppressions; `safe_json_loads` returning `Any` against a declared
+`dict[str, Any]` type, fixed with a genuine runtime check (not an unsafe
+cast) that also improves the actual error message on malformed LLM
+output; a well-known mypy limitation with `try/except ImportError`
+same-name conditional imports in `_compat/__init__.py`; a real
+`pstats.Stats.stats` typeshed stub gap; several bare `dict`/`list`
+generics missing type parameters; `RUF022` (`__all__` sorting), `RUF100`
+(a `BLE` rule several `noqa` comments already assumed was enabled, but
+never actually was — added the rule rather than deleting the
+justifications), `UP037` (quoted annotations no longer needed once
+`from __future__ import annotations` was added, across 8 files), and
+several `SIM`/`C408`/`F841`/`B017` mechanical simplifications.
+`types-PyYAML` was added to dev dependencies (mypy had no stubs for
+`yaml` at all).
+
+**Still not claimed**: a clean `mypy`/`ruff` run. Every specific error
+from both pasted runs was addressed, but this sandboxed environment has
+no way to re-run either tool to confirm a fresh pass reports zero
+remaining findings.
+
+## The most important caveat, stated plainly (updated after two real CI runs)
 
 This delivery's **test suite (247 tests: 156 unit + 27 integration + 64
 evaluation) genuinely runs and genuinely passes** under this project's
@@ -258,29 +306,30 @@ offline development setup — that was independently verified multiple
 times during development, including after every bug fix (two documented
 in `adr/0004`, two more in `adr/0005`, a performance bug in `adr/0006`,
 a real package-build gap plus two DX/metrics gaps plus a multi-seed
-test-queue bug in `adr/0007`-`adr/0009`, and a real Pydantic-vs-shim
-validator bug in `adr/0010`, found by the first actual real-CI run
-described in the section above).
+test-queue bug in `adr/0007`-`adr/0009`, a real Pydantic-vs-shim
+validator bug in `adr/0010`, and roughly 30 real type/lint bugs in
+`adr/0011` — the latter two found by the project owner's two real CI
+runs described above).
 
-As of that first real run, `ruff`, real `pytest` (with real Pydantic),
-and the GitHub Actions CI workflow have now genuinely executed —
-**not zero-for-four anymore**, but not a clean sweep either: real pytest
-found and this project fixed one genuine bug (`adr/0010`); real ruff
-found 225 lint findings, of which this pass fixed what it could verify
-by direct inspection and narrowed the ruleset with justification for the
-rest (see above) but did NOT re-run ruff to confirm a lower count, since
-this sandboxed environment still has no network access to install it.
-`mypy`, `pre-commit`, and any real LLM provider call remain fully
-unverified in this delivery specifically — still fully configured and
-believed correct on manual review, but "expected to work" and "verified
-to work" remain different claims. If you have network access, the
-single most valuable next steps are:
+As of those two real runs, `ruff` (twice), real `pytest` (with real
+Pydantic), `mypy` (once), and the GitHub Actions CI workflow have all
+now genuinely executed — a meaningfully different state than this
+project's earlier "zero real tools have ever run" caveat. Not a clean
+sweep yet: every SPECIFIC error from both pasted runs was addressed,
+narrowed with justification, or fixed outright, but neither tool has
+been re-run in this sandboxed environment to confirm a fresh pass is
+fully clean, since it still has no network access to install either.
+`pre-commit` and any real LLM provider call remain fully unverified in
+this delivery specifically — still fully configured and believed
+correct on manual review, but "expected to work" and "verified to work"
+remain different claims. If you have network access, the single most
+valuable next steps are:
 
 ```bash
 pip install -e ".[dev]"
-ruff check src tests --fix   # auto-fixes the ~74 mechanical findings first
+ruff check src tests --fix   # auto-fixes remaining mechanical findings first
 ruff check src tests         # see what's left after that
-mypy
+mypy                         # confirm the config-scoping fix + ~30 bug fixes landed clean
 pytest --cov=reliableagent
 pre-commit run --all-files
 python examples/run_evaluation.py --use-real-anthropic-model claude-sonnet-4-6

@@ -195,6 +195,53 @@ genuine, non-sandboxed verification this project had ever received.
   above; added three precise, justified `# noqa: S603` comments on
   verified-safe `subprocess` calls in build tooling.
 
+### Fixed — Second real CI run (mypy + a second real ruff run)
+The project owner ran `mypy .` for the first time (351 errors) and
+`ruff check` a second time after the fixes above (204 errors, down from
+225). Both counts traced overwhelmingly to one root cause, plus roughly
+30 genuine, individually-fixed bugs.
+
+- **The mypy config never actually scoped `strict` mode away from tests/
+  scripts/examples**: `packages = ["reliableagent"]` only takes effect
+  when mypy is invoked bare; running `mypy .` (a natural, common
+  invocation) bypasses it entirely and applies full strict mode,
+  including `disallow_untyped_defs`, to every test/example/script file —
+  none of which were ever meant to be held to the library's own bar
+  (mirroring ruff's existing `ANN` exemptions for the same three
+  directories). Fixed with explicit `[[tool.mypy.overrides]]` for
+  `tests.*`/`scripts.*`/`examples.*`, which alone resolved the large
+  majority of the 351 errors. ([`adr/0011`](adr/0011-second-real-ci-run-mypy-and-ruff-fixes.md))
+- **`ToolSpec.result_validator: object = None`**: a genuinely too-weak
+  placeholder type, causing real "object not callable" errors at every
+  call site. Fixed to `Callable[[Any], bool] | None`.
+- **A `None`-initialized variable later reassigned to a function** in
+  `examples/run_evaluation.py` was inferred as permanently `None`-typed
+  by mypy (first-assignment inference), causing a real "object not
+  callable" at its use site. Fixed with an explicit `Callable[...] | None`
+  annotation up front.
+- **Two real union-attr gaps in `orchestrator.py` itself**
+  (`GuardrailRunResult.blocking_decision` accessed without narrowing)
+  fixed with explicit `assert ... is not None` statements documenting
+  the actual invariant, not blind `type: ignore`s.
+- **`safe_json_loads` returned `Any` from a declared `dict[str, Any]`
+  return type** — fixed with a genuine runtime check (raises `ValueError`
+  if the parsed JSON isn't actually an object) rather than an unsafe
+  blind cast, which also surfaces a malformed-response failure mode more
+  clearly than letting it fail several lines later.
+- A well-documented mypy limitation with `try/except ImportError`
+  conditional-same-name imports in `_compat/__init__.py`, a real
+  `pstats.Stats.stats` typeshed stub gap in `profile_performance.py`,
+  several bare `dict`/`list` generics missing type parameters, `RUF022`
+  (`__all__` sorting, fully alphabetized in 3 files), `RUF100` (unused
+  `noqa`s — `BLE` was never actually added to ruff's `select` despite
+  several `# noqa: BLE001` comments already assuming it; added the rule
+  rather than deleting the justifications), `UP037` (quoted annotations
+  no longer needed with `from __future__ import annotations`, fixed in
+  8 files), and several `SIM`/`C408`/`F841`/`B017` mechanical
+  simplifications. `types-PyYAML` added to dev dependencies (mypy had no
+  stubs for `yaml` at all). Full accounting in
+  [`adr/0011`](adr/0011-second-real-ci-run-mypy-and-ruff-fixes.md).
+
 ### Documentation
 - `README.md` rewritten for clarity and DX: a scannable table of
   contents, install/quickstart pushed to the top, and the detailed
@@ -203,10 +250,10 @@ genuine, non-sandboxed verification this project had ever received.
   itself.
 - `docs/roadmap_status.md`: itemized, unhedged comparison against every
   requirement in the original project roadmap, including sections for
-  the post-delivery audit and the first real CI run.
+  the post-delivery audit and both real CI runs.
 - `docs/architecture.md`: an 11-section architecture deep-dive covering
   every module's design decisions, extension points, and performance
   characteristics.
-- 10 Architecture Decision Records (`adr/0001`-`adr/0010`), each stating
+- 11 Architecture Decision Records (`adr/0001`-`adr/0011`), each stating
   a real tradeoff, the alternatives considered and rejected, and the
   measured consequences.

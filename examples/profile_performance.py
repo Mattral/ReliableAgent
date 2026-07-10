@@ -123,7 +123,13 @@ def summarize_by_layer(profiler: cProfile.Profile) -> dict[str, float]:
     """
     stats = pstats.Stats(profiler)
     layer_totals: dict[str, float] = defaultdict(float)
-    for func, (_cc, _nc, tottime, _ct, _callers) in stats.stats.items():
+    # `pstats.Stats.stats` is a real, documented, public runtime
+    # attribute (a dict of {function_key: (call_count, num_calls,
+    # tottime, cumtime, callers)}) -- there's no cleaner public API for
+    # iterating per-function stats. typeshed's stub for `pstats.Stats`
+    # doesn't declare it, which is a stub gap, not a real type error.
+    raw_stats = stats.stats  # type: ignore[attr-defined]
+    for func, (_cc, _nc, tottime, _ct, _callers) in raw_stats.items():
         filename, _lineno, function_name = func
         layer_totals[_layer_for(filename, function_name)] += tottime
     return dict(layer_totals)

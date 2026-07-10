@@ -32,12 +32,15 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from reliableagent.evaluation import ALL_GOLDEN_TASKS, EvalConfig, analyze_failures
 from reliableagent.evaluation.factory import run_golden_suite
+from reliableagent.evaluation.golden_task import GoldenTask
+from reliableagent.llm.base import LLMClient
 
 
 def parse_args() -> argparse.Namespace:
@@ -84,13 +87,13 @@ def main() -> int:
             print(f"No golden tasks found in category '{args.category}'.")
             return 1
 
-    llm_client_builder = None
+    llm_client_builder: Callable[[GoldenTask], LLMClient] | None = None
     if args.use_real_anthropic_model:
         from reliableagent.llm import AnthropicLLMClient
 
         model_name = args.use_real_anthropic_model
 
-        def llm_client_builder(_golden_task):  # noqa: ANN001, ANN202
+        def llm_client_builder(_golden_task: GoldenTask) -> LLMClient:
             return AnthropicLLMClient(model=model_name)
 
         print(f"Using real Anthropic model: {model_name}\n")

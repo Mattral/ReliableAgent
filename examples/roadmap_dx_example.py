@@ -55,11 +55,13 @@ def my_calculator_tool(expression: str) -> float:
 
     def _eval_node(node: ast.AST) -> float:
         if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
-            return node.value
+            return float(node.value)
         if isinstance(node, ast.BinOp) and type(node.op) in allowed_operators:
-            return allowed_operators[type(node.op)](_eval_node(node.left), _eval_node(node.right))
+            op_func = allowed_operators[type(node.op)]
+            return float(op_func(_eval_node(node.left), _eval_node(node.right)))
         if isinstance(node, ast.UnaryOp) and type(node.op) in allowed_operators:
-            return allowed_operators[type(node.op)](_eval_node(node.operand))
+            op_func = allowed_operators[type(node.op)]
+            return float(op_func(_eval_node(node.operand)))
         raise ValueError(f"Unsupported expression element: {ast.dump(node)}")
 
     parsed = ast.parse(expression, mode="eval")
